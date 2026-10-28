@@ -2,7 +2,7 @@
 
 > 面向 AI Agent 的论文全流程技能包：**找文献 → 写初稿 → 跑检测 → 核引文**，全程在对话里完成，产物落到用户自己的电脑。
 
-- 版本：**1.0.0**（对外首发版）
+- 版本：**1.0.2**
 - 官网与实时价目：https://paper.skillsutra.cn （价目页 `/price`，一切报价以接口实时返回为准）
 - 服务端点：https://owl.skillsutra.cn （MCP / HTTP 网关）
 
@@ -13,7 +13,7 @@
 | 文献 | `owl_search` `owl_article` `owl_fulltext` `owl_oa` `owl_citations` | 中外文检索、详情、中文授权全文、外文 OA 免费全文、引文追溯 |
 | 写作 | `owl_quote` `owl_run` `owl_run_status` `owl_run_content` | 一次性连续成文，按实际成文字数结算 |
 | 配图 | `owl_figure` | TikZ 矢量示意 / 数据图表 / AI 配图，按实际交付张数结算 |
-| 检测 | `owl_products` `owl_run_report` | 查重、AIGC、格式、智评、图像可信度、文献质量、斟校对（21 个商品） |
+| 检测 | `owl_products` `owl_quote` `owl_run` `owl_run_report` | 查重、AIGC、格式、智评、图像可信度、文献质量、斟校对（21 个商品，检测经 `owl_quote`(check) 下单） |
 | 核验 | `owl_quote`(verify) `owl_run` `owl_run_report` | 逐条核对引文元数据，附撤稿徽标 |
 | 账户 | `owl_wallet` `owl_recharge` `owl_recharge_status` `owl_campaign` `owl_meta` | 余额、充值、券码、版本公告 |
 
