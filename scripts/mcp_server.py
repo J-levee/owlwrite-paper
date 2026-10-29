@@ -29,6 +29,7 @@
 import asyncio
 import json
 import os
+from contextvars import ContextVar
 
 import httpx
 from mcp.server.mcpserver import MCPServer
@@ -53,12 +54,22 @@ mcp = MCPServer(
 _TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 
 
+# 远程 MCP（批 F M2，/mcp）下的**每次请求**的用户 token：由鉴权中间件按请求注入。
+# stdio 场景无中间件，恒为空 → 回退到模块级 OWL_API_KEY，行为与改造前逐字节一致。
+_request_token: ContextVar[str] = ContextVar("owl_request_token", default="")
+
+
+def _bearer() -> str:
+    return _request_token.get() or OWL_API_KEY
+
+
 def _headers() -> dict:
-    if not OWL_API_KEY:
+    tok = _bearer()
+    if not tok:
         raise ToolError(
             "未配置 OWL_API_KEY。请在 MCP 客户端配置里加 env: {\"OWL_API_KEY\": \"owl_sk_...\"}；"
             "还没有账号请到 paper.skillsutra.cn 注册。")
-    return {"Authorization": f"Bearer {OWL_API_KEY}",
+    return {"Authorization": f"Bearer {tok}",
             "Content-Type": "application/json",
             "X-Owl-Skill-Version": OWL_SKILL_VERSION}
 
