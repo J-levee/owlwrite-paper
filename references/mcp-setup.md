@@ -44,11 +44,19 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
   两者不同域，填错会连不上。
 - Python ≥ 3.11，需 `pip install mcp httpx`。
 
-### 配好后验证
+### 配好后验证与冷启动注意
 
 对话里说「查一下肠道菌群和代谢的文献」，能返回带 DOI 的文献列表即接入成功。
 
-## 3. 工具一览（17 个）
+- **冷启动陷阱**：MCP 客户端启动后第一次调工具可能报连接错误——是客户端在拉起本地进程，
+  等几秒重试即可，不要改配置重装；连续失败才检查 `OWL_BASE`（网关是 owl.skillsutra.cn，
+  官网是 paper.skillsutra.cn，两者不同域，填错连不上）。
+- **开工先调 `owl_meta`**：返回 `notices` 是平台公告（如检测通道状态、活动上线），
+  有新公告要按相关度转告用户；`channels.weipu_ready=false` 时检测类能力暂不可用，别白跑报价。
+- **版本判定**：`owl_meta` 的 `required_update=true` 且本地版本低于 `min_supported_version`
+  时必须先让用户更新技能再继续付费动作。
+
+## 3. 工具一览（18 个）
 
 | 工具 | 作用 | 计费 |
 |---|---|---|
@@ -59,7 +67,8 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 | `owl_citations` | 引文追溯（它引用了谁 / 谁引用了它） | 2 积分/次；72 小时缓存 1 积分 |
 | `owl_figure` | 科研配图（TikZ 示意 / 数据图表 / AI 配图） | 25 积分/张，按实际交付张数；未出图 0 积分 |
 | `owl_products` | 全平台实时价目（价格唯一可信来源） | 免费 |
-| `owl_meta` | 技能最新版本 + 平台公告（开工校准） | 免费 |
+| `owl_meta` | 技能最新版本 + 平台公告（开工校准；含 `channels.weipu_ready` 检测通道状态） | 免费 |
+| `owl_disciplines` | 斟知智评学科码表（class_id 用，逐级筛给用户选） | 免费 |
 | `owl_campaign` | 活动券码兑换 / 我的邀请码与战绩 | 免费 |
 | `owl_quote` | 写作 / 检测 / 核验报价（写作返回预估区间） | 免费（不扣积分） |
 | `owl_run` | 执行已报价任务 | 写作按实际成文字数结算（超出报价上限不加收），其余按报价 |

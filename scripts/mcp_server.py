@@ -38,7 +38,7 @@ OWL_BASE = os.environ.get("OWL_BASE", "http://127.0.0.1:8787").rstrip("/")
 OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # 技能版本随包发布，网关据此判断是否强制更新（meta.json 的 min_supported_version）。
 # 必须在每次请求里带上，否则网关无法识别旧版客户端（缺头时网关一律放行，避免误伤 API 用户）。
-OWL_SKILL_VERSION = "1.0.0"
+OWL_SKILL_VERSION = "1.1.0"
 
 mcp = MCPServer(
     "owlwrite",
@@ -135,17 +135,34 @@ async def owl_meta() -> str:
 
 
 @mcp.tool()
+async def owl_disciplines() -> str:
+    """斟知学科码表（智评 class_id 用，批 A5）。
+
+    何时调：用户要做**斟知智评**（商品 1026/1029/1030）检测且要指定学科时；
+    查重/大学生版（1034 等）**不需要** class_id，别多调。
+
+    返回 dims 五个维度：1-1 研究生专硕 / 1-2 研究生学硕 / 2-1 本科 / 2-2 高职本科 /
+    2-3 高职专科。**礼仪**：先问用户是哪类（本科/研究生），再只展开对应维度逐级
+    筛选让用户选，不要把 5000 条直接甩出来。503 weipu_unavailable = 检测通道暂未
+    开通，请如实告知用户「检测服务暂不可用，非你的操作问题」，并先做写作/检索。
+    """
+    return _dump(await _call("GET", "/v1/disciplines"))
+
+
+@mcp.tool()
 async def owl_quote(action: str, params: dict) -> str:
     """对写作/查重/核验报价（不扣费）。返回 quote_id，供 owl_run 使用。
 
     Args:
         action: "write" | "check" | "verify"
-          - write: params = {"topic": 题目, "mode": standard|advanced, "target_chars": 目标字数}
+          - write: params = {"topic": 题目, "mode": standard|guided, "target_chars": 目标字数}
           - check: params = {"content": 全文文本, "product": 商品 code（先调 owl_products 获取）}
           - verify: params = {"refs_text": 参考文献编号列表文本(GB/T 7714), "lang": zh|en|auto}
         params: 上述参数字典。
 
     礼仪（技能文档强制）：拿到报价先告知用户价格，经同意再 owl_run。不要默默扣费。
+    写作报价是**估算**（billing_mode=postpaid）：积分估算仅作参考，以实际扣除为准
+    （按实际成文字数精确结算，无冻结、无上限）。
     """
     return _dump(await _call("POST", "/v1/quote", {"action": action, "params": params}))
 
