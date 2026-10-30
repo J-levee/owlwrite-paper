@@ -2,9 +2,9 @@
 
 > 面向 AI Agent 的论文全流程技能包：**找文献 → 写初稿 → 跑检测 → 核引文**，全程在对话里完成，产物落到用户自己的电脑。
 
-- 版本：**1.1.7**
+- 版本：**1.1.8**
 - 官网与实时价目：https://paper.skillsutra.cn （价目页 `/price`，一切报价以接口实时返回为准）
-- 服务端点：https://owl.skillsutra.cn （MCP / HTTP 网关）
+- 服务端点：https://owl.skillsutra.cn （MCP / HTTP 接口）
 
 ## 安装（两个官方入口，任选其一）
 
@@ -19,7 +19,7 @@
 
 1. `GET https://owl.skillsutra.cn/v1/meta` → `skill.latest_version` 不低于 `1.1.2`；
 2. 同一响应的 `channels.weipu_ready` 为 `true` 才做检测类任务，为 `false` 时读 `channels.weipu_detail` 如实告知用户；
-3. 调 `owl_wallet` 能返回余额 → API Key 与网关连通；
+3. 调 `owl_wallet` 能返回余额 → API Key 与服务端连通；
 4. `owl_*` 工具共 19 个（含 `owl_upload`，本机文件上传换 `file_id`）。
 
 ### 手动装（离线 / 自建宿主）
@@ -52,7 +52,7 @@
 | 配图 | `owl_figure` | TikZ 矢量示意 / 数据图表 / AI 配图，按实际交付张数结算 |
 | 检测 | `owl_upload` `owl_products` `owl_quote` `owl_run` `owl_run_report` | 查重、AIGC、格式、智评、图像可信度、文献质量、斟校对（21 个商品）；本机文件先 `owl_upload` 换 `file_id` 再报价；报告四份 `part=main\|compare\|simple\|fulltext` |
 | 核验 | `owl_quote`(verify) `owl_run` `owl_run_report` | 逐条核对引文元数据，附撤稿徽标 |
-| 账户 | `owl_wallet` `owl_recharge` `owl_recharge_status` `owl_campaign` `owl_meta` `owl_disciplines` | 余额、充值、券码、版本公告与通道状态、学科码表 |
+| 账户 | `owl_wallet` `owl_recharge` `owl_recharge_status` `owl_campaign` `owl_meta` `owl_disciplines` | 余额、充值、券码、版本公告与检测服务状态、学科码表 |
 
 共 **19 个 MCP 工具**。
 

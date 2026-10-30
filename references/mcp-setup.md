@@ -53,7 +53,7 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 ```
 
 - `<技能目录>` 换成你本机技能包实际路径（`scripts/mcp_server.py` 就在技能包里，无需另下文件）。
-- `OWL_BASE` 固定填 **`https://owl.skillsutra.cn`**（API 网关）。官网是 `paper.skillsutra.cn`，
+- `OWL_BASE` 固定填 **`https://owl.skillsutra.cn`**（接口地址）。官网是 `paper.skillsutra.cn`，
   两者不同域，填错会连不上。
 - Python ≥ 3.11，需 `pip install mcp httpx`。
 - **上传大文件把客户端超时放宽**：`owl_upload` 传 30MB 论文在上行慢的网络可能超过 30 秒，
@@ -64,11 +64,11 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 对话里说「查一下肠道菌群和代谢的文献」，能返回带 DOI 的文献列表即接入成功。
 
 - **冷启动陷阱**：MCP 客户端启动后第一次调工具可能报连接错误——是客户端在拉起本地进程，
-  等几秒重试即可，不要改配置重装；连续失败才检查 `OWL_BASE`（网关是 owl.skillsutra.cn，
+  等几秒重试即可，不要改配置重装；连续失败才检查 `OWL_BASE`（服务端是 owl.skillsutra.cn，
   官网是 paper.skillsutra.cn，两者不同域，填错连不上）。
-- **开工先调 `owl_meta`**：返回 `notices` 是平台公告（如检测通道状态、活动上线），
+- **开工先调 `owl_meta`**：返回 `notices` 是平台公告（如检测服务状态、活动上线），
   有新公告要按相关度转告用户；`channels.weipu_ready=false` 时检测类能力暂不可用，别白跑报价。
-  该字段是上游**真实探活**（`queryBalance`）结果，不是「凭据填没填」；原因看同级
+  该字段是检测服务的**真实连通性**（`queryBalance`）检查结果，不是「凭据填没填」；原因看同级
   `channels.weipu_state`（`unconfigured` / `auth_failed` / `ip_blocked` / `account_issue` /
   `unverified`）与 `channels.weipu_detail`，对用户只转述 `weipu_detail` 这句人话。
 - **版本判定**：`owl_meta` 的 `required_update=true` 且本地版本低于 `min_supported_version`
@@ -85,7 +85,7 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 | `owl_citations` | 引文追溯（它引用了谁 / 谁引用了它） | 2 积分/次；72 小时缓存 1 积分 |
 | `owl_figure` | 科研配图（TikZ 示意 / 数据图表 / AI 配图） | 25 积分/张，按实际交付张数；未出图 0 积分 |
 | `owl_products` | 全平台实时价目（价格唯一可信来源） | 免费 |
-| `owl_meta` | 技能最新版本 + 平台公告（开工校准；含 `channels.weipu_ready` 检测通道状态） | 免费 |
+| `owl_meta` | 技能最新版本 + 平台公告（开工校准；含 `channels.weipu_ready` 检测服务状态） | 免费 |
 | `owl_disciplines` | 斟知智评学科码表（class_id 用，逐级筛给用户选） | 免费 |
 | `owl_campaign` | 活动券码兑换 / 我的邀请码与战绩 | 免费 |
 | `owl_upload` | 上传本机文件换 `file_id`（检测 / 图像 / 格式检测必用；≤30MB） | 免费 |

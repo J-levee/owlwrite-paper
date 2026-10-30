@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""OwlWrite 官方 HTTP 封装（2026-10-29 批 C3）。
+"""OwlWrite 官方 HTTP 封装（2026-10-29）。
 
-解决 Agent 直连网关的三类高频坑：
-  1) 忘带/错写 Content-Type → 网关 422；本脚本对 POST/PUT 自动 application/json
+解决 Agent 直连服务端的三类高频坑：
+  1) 忘带/错写 Content-Type → 服务端 422；本脚本对 POST/PUT 自动 application/json
   2) Bearer key 散落在对话/命令行里 → 统一从环境变量 OWL_API_KEY 或 ~/.owl_creds.json 读取
   3) 响应体散在终端里难复核 → --out 把原始 JSON 落盘，供技能包归档
 
@@ -69,7 +69,7 @@ def call(method, path, data=None, key=None, base=None, timeout=120):
 
 
 def claim_favorite(image_path, key=None, base=None):
-    """提交 SkillHub 收藏截图审核（批 D）。返回发放结果或拒单原因。"""
+    """提交 SkillHub 收藏截图审核。返回发放结果或拒单原因。"""
     mime = mimetypes.guess_type(image_path)[0] or "image/png"
     with open(image_path, "rb") as f:
         raw = f.read()

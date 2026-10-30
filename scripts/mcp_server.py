@@ -19,8 +19,8 @@
   }
 
 设计原则：
-  - 工具返回**结构化 JSON 文本**，字段名与网关一致，Agent 可直接消费；
-  - 错误透传网关的 code/message（402 余额不足、422 参数错、401 key 错），
+  - 工具返回**结构化 JSON 文本**，字段名与服务端一致，Agent 可直接消费；
+  - 错误透传服务端的 code/message（402 余额不足、422 参数错、401 key 错），
     绝不吞掉——Agent 需要根据 code 决定是提示用户充值还是改参数；
   - 计费语义原样暴露：搜索返回 points_charged，写作/查重走 quote→run 两步，
     Agent 必须先报价给用户看，再执行（技能文档里写死了这条礼仪）。
@@ -47,7 +47,7 @@ OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # ⚠️ 发布前必须与 SKILL.md 的 version / connector-meta.version / meta.json latest_version
 #    四处对齐（preflight A30 守门），否则装的是最新版也会被自己判成旧版——每次开工都
 #    提示「有新版本」，而更新完还是同一句（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.1.7"
+OWL_SKILL_VERSION = "1.1.8"
 
 mcp = MCPServer(
     "owlwrite",
@@ -62,7 +62,7 @@ mcp = MCPServer(
 _TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 
 
-# 远程 MCP（批 F M2，/mcp）下的**每次请求**的用户 token：由鉴权中间件按请求注入。
+# 远程 MCP（/mcp）下的**每次请求**的用户 token：由鉴权中间件按请求注入。
 # stdio 场景无中间件，恒为空 → 回退到模块级 OWL_API_KEY，行为与改造前逐字节一致。
 _request_token: ContextVar[str] = ContextVar("owl_request_token", default="")
 
@@ -101,7 +101,7 @@ def _dump(d) -> str:
 
 
 def _raise_if_error(r, data) -> None:
-    """统一错误透传：网关 code/message/extra 原样抛给 Agent，不包装不吞。"""
+    """统一错误透传：服务端 code/message/extra 原样抛给 Agent，不包装不吞。"""
     if r.status_code < 400:
         return
     err = data.get("detail") if isinstance(data.get("detail"), dict) else data
@@ -122,7 +122,7 @@ async def owl_search(query: str, limit: int = 5, lang: str = "all", expand: bool
 
     返回字段里值得转告用户的：
       - score：相关性得分（题名命中 > 摘要命中 > 核心刊 > 有 DOI > 年份新）
-      - core / core_tags：是否核心期刊（core_tags 是上游权威标记，如 BDHX 北大核心 / CSCD / CSSCI / SCI）
+      - core / core_tags：是否核心期刊（core_tags 是官方权威标记，如 BDHX 北大核心 / CSCD / CSSCI / SCI）
       - is_oa：是否为开放获取（外文命中时可直接用 owl_oa 免费取全文）
 
     Args:
@@ -158,7 +158,7 @@ async def owl_meta() -> str:
     3) 版本一致 → 静默，不打扰用户。
     notices 里有新公告时按相关度转告。
 
-    检测类任务开工前看 channels.weipu_ready：它是上游**真实探活**结果（不是「凭据填没填」）。
+    检测类任务开工前看 channels.weipu_ready：它是检测服务的**真实连通性**检查结果（不是「凭据填没填」）。
     为 false 时读同级 channels.weipu_detail（一句人话）转告用户，别把 weipu_state 的内部码念给他；
     只有 true 才去报价，否则白跑一趟。"""
     return _dump(await _call("GET", "/v1/meta"))
@@ -166,14 +166,14 @@ async def owl_meta() -> str:
 
 @mcp.tool()
 async def owl_disciplines() -> str:
-    """斟知学科码表（智评 class_id 用，批 A5）。
+    """斟知学科码表（智评 class_id 用）。
 
     何时调：用户要做**斟知智评**（商品 1026/1029/1030）检测且要指定学科时；
     查重/大学生版（1034 等）**不需要** class_id，别多调。
 
     返回 dims 五个维度：1-1 研究生专硕 / 1-2 研究生学硕 / 2-1 本科 / 2-2 高职本科 /
     2-3 高职专科。**礼仪**：先问用户是哪类（本科/研究生），再只展开对应维度逐级
-    筛选让用户选，不要把 5000 条直接甩出来。503 weipu_unavailable = 检测通道暂未
+    筛选让用户选，不要把 5000 条直接甩出来。503 weipu_unavailable = 检测服务暂未
     开通，请如实告知用户「检测服务暂不可用，非你的操作问题」，并先做写作/检索。
     """
     return _dump(await _call("GET", "/v1/disciplines"))
@@ -188,7 +188,7 @@ async def owl_quote(action: str, params: dict) -> str:
           - write: params = {"topic": 题目, "mode": standard|guided, "target_chars": 目标字数}
           - check: params = {"file_id": 已上传文件编号, "product": 商品 code, "hanzi": 汉字数,
                              "title": 题名, "author": 作者}
-                    纯文本可直接用 {"content": 全文, "product": ...}（网关落成 docx 走真实解析）；
+                    纯文本可直接用 {"content": 全文, "product": ...}（服务端落成 docx 走真实解析）；
                     图像 / 格式检测必须给 file_id（先 owl_upload 上传本机文件）。
                     product 先调 owl_products 获取，去掉 `wp.` 前缀只留裸编码。
           - verify: params = {"refs_text": 参考文献编号列表文本(GB/T 7714), "lang": zh|en|auto}
@@ -203,9 +203,9 @@ async def owl_quote(action: str, params: dict) -> str:
 
 @mcp.tool()
 async def owl_upload(file_path: str) -> str:
-    """上传本机文件到网关，返回 file_id（检测 / 图像 / 格式检测必用）。
+    """上传本机文件到服务端，返回 file_id（检测 / 图像 / 格式检测必用）。
 
-    为什么需要：网关在云端，读不到你本机的 D:/… 路径。先上传拿 file_id，
+    为什么需要：服务在云端，读不到你本机的 D:/… 路径。先上传拿 file_id，
     再把它放进 owl_quote 的 check 参数（同时给 hanzi 汉字数才能出价）。
     只传纯文本的可以用 content 直传，不必上传。
 
@@ -249,7 +249,7 @@ async def owl_run(quote_id: str) -> str:
 async def owl_run_status(run_id: str) -> str:
     """查询任务状态与进度。status: queued/running/succeeded/failed/cancelled/pending_upstream。
 
-    pending_upstream = 上游已收单、报告仍在生成（**不是失败**），稍后再查即可，别重建单。
+    pending_upstream = 检测机构已收单、报告仍在生成（**不是失败**），稍后再查即可，别重建单。
     建议 3-5 秒轮询一次；succeeded 后 result 里是成品（写作正文截断在 2000 字，
     完整全文用 owl_run_content 取回后落盘；核验/检测报告用 owl_run_report）。
     """
