@@ -37,13 +37,17 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 OWL_BASE = os.environ.get("OWL_BASE", "http://127.0.0.1:8787").rstrip("/")
+# 对外可访问基址（2026-10-30 缺陷修复）：远程 MCP 场景由 mcp_remote 注入公网域名；
+# stdio 场景未设置时回退 OWL_BASE —— 行为与修复前逐字节一致。
+# 严禁把 _call() 里的自调地址改成 PUBLIC_BASE：自调必须走 loopback（计费闸门依赖它）。
+PUBLIC_BASE = (os.environ.get("OWL_PUBLIC_BASE") or OWL_BASE).rstrip("/")
 OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # 技能版本随包发布，网关据此判断是否强制更新（meta.json 的 min_supported_version）。
 # 必须在每次请求里带上，否则网关无法识别旧版客户端（缺头时网关一律放行，避免误伤 API 用户）。
 # ⚠️ 发布前必须与 SKILL.md 的 version / connector-meta.version / meta.json latest_version
 #    四处对齐（preflight A30 守门），否则装的是最新版也会被自己判成旧版——每次开工都
 #    提示「有新版本」，而更新完还是同一句（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.1.6"
+OWL_SKILL_VERSION = "1.1.7"
 
 mcp = MCPServer(
     "owlwrite",
@@ -258,13 +262,16 @@ async def owl_run_report(run_id: str, part: str = "") -> str:
 
     part 仅对检测类有效，可选：main（默认，综合报告 HTML）、compare（比对报告 HTML）、
     simple（简洁版 PDF）、fulltext（原文对照 PDF）。
-    返回的 report_url 用浏览器打开即可；要把报告写进文档/交付给用户时，
+    返回的 report_url 自带 24 小时签名，浏览器可直接打开；要把报告写进文档/交付给用户时，
     按 part 取对应链接（例如需要 PDF 就用 simple 或 fulltext）。
     """
     data = await _call("GET", f"/v1/runs/{run_id}")
     status, action = data.get("status"), data.get("action")
     result = data.get("result") or {}
-    base = f"{OWL_BASE}/v1/runs/{run_id}/report"
+    # 签名 query 由 REST /v1/runs/{run_id} 读取时动态签发（见 app/main.py read_run）。
+    # ⚠️ 必须取 data（整个返回体）而不是 result（其子字段）—— signed_query 在返回体顶层。
+    _sq = data.get("signed_query") or ""
+    base = f"{PUBLIC_BASE}/v1/runs/{run_id}/report" + (f"?{_sq}" if _sq else "")
 
     # 检测类：4 份报告 + 结论摘要（原来这里一律返回「尚无核验结果」，等于对检测单失明）
     if action == "check":
@@ -278,7 +285,10 @@ async def owl_run_report(run_id: str, part: str = "") -> str:
         if pick not in parts:
             return _dump({"run_id": run_id, "status": status, "error": "unknown_part",
                           "available_parts": sorted(parts)})
-        url_of = lambda k: base if k == "main" else f"{base}?part={k}"
+        # 红队审查 4.1：_sq 为空时 base 不含 "?"，连接符必须回退成 "?"，
+        # 否则拼出 `/report&part=compare` 这类畸形 URL（浏览器当路径 → 404 且难排查）。
+        _sep = "&" if _sq else "?"
+        url_of = lambda k: base if k == "main" else f"{base}{_sep}part={k}"
         return _dump({
             "run_id": run_id, "status": status, "action": "check",
             "headline": result.get("headline"),
@@ -312,9 +322,11 @@ async def owl_run_report(run_id: str, part: str = "") -> str:
         note = f"  ← {i['note']}" if i.get("note") else ""
         diff_txt = f"  ← 可修正：{diffs}" if diffs else ""
         lines.append(f"[{i['idx']}] {i['verdict']}  {str(i['title'])[:48]}{diff_txt}{note}")
+    _sq2 = data.get("signed_query") or ""
     return _dump({"run_id": run_id, "summary": summary, "digest": lines,
-                  "report_url": f"{OWL_BASE}/v1/runs/{run_id}/report",
-                  "report_tip": "report_url 用浏览器打开是带判定徽标的完整 HTML 报告"})
+                  "report_url": f"{PUBLIC_BASE}/v1/runs/{run_id}/report"
+                                + (f"?{_sq2}" if _sq2 else ""),
+                  "report_tip": "report_url 自带 24 小时签名，浏览器可直接打开（带判定徽标的完整 HTML）"})
 
 
 @mcp.tool()
@@ -350,7 +362,7 @@ async def owl_figure(mode: str, description: str, count: int = 1,
     计费：25 积分/张（¥0.25），按**实际交付张数**扣，生成失败或没出图不扣。
     调用前请先告诉用户「本次生成 N 张，消耗 N×25 积分」，得到同意再调。
     chart 模式没有真实数据时不要编数据——如实问用户要数据或改用 tikz。
-    返回 figures[].url 需带鉴权头 HTTP GET 下载，存到 04-图/<序号>-<说明>.png。
+    返回 figures[].download_url 自带 24 小时签名，可直接下载，存到 04-图/<序号>-<说明>.png。
     """
     params = {"mode": mode, "description": description, "count": count}
     if data:
@@ -377,9 +389,11 @@ async def owl_figure(mode: str, description: str, count: int = 1,
         return _dump({"run_id": rid, "status": "running",
                       "message": "仍未完成，用 owl_run_status 继续查；积分按实际交付张数结算"})
     res = final.get("result") or {}
+    # 签名在 final（/v1/runs/{run_id} 返回体）顶层，不在 result 子字段里
+    _sq3 = final.get("signed_query") or ""
     for f in res.get("figures") or []:
-        f["download_url"] = OWL_BASE + f["url"]
-        f["hint"] = "带 Authorization 头 HTTP GET 下载，存 04-图/"
+        f["download_url"] = PUBLIC_BASE + f["url"] + (f"?{_sq3}" if _sq3 else "")
+        f["hint"] = "链接自带 24 小时签名，可直接下载（也可带 Authorization 头）；存 04-图/"
     return _dump({"run_id": rid, "status": final.get("status"),
                   "points_charged": final.get("points_settled"),
                   "figures": res.get("figures") or [],
@@ -410,8 +424,8 @@ async def owl_recharge(amount_cny: int, channel: str = "wechat") -> str:
     r = await _call("POST", "/v1/pay/recharge",
                     {"points": amount_cny * 100, "channel": channel})
     if isinstance(r, dict) and r.get("qr_path"):
-        base = os.environ.get("OWL_BASE", "https://owl.skillsutra.cn").rstrip("/")
-        r["qr_url"] = base + r.pop("qr_path")
+        # qr_path 自带 15 分钟签名（recharge.qr_signed_path），这里只需正确的前缀
+        r["qr_url"] = PUBLIC_BASE + r.pop("qr_path")
         r["notice"] = ("请把 qr_url 发给用户在浏览器打开并扫码支付；到账约 1 分钟，"
                        "支付后可用 owl_run_recharge_status 或 owl_wallet 确认。"
                        "不要重复调用本工具——重复创建会产生多笔未支付订单。")
