@@ -29,6 +29,7 @@
 import asyncio
 import json
 import os
+import urllib.parse
 from contextvars import ContextVar
 
 import httpx
@@ -39,7 +40,9 @@ OWL_BASE = os.environ.get("OWL_BASE", "http://127.0.0.1:8787").rstrip("/")
 OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # 技能版本随包发布，网关据此判断是否强制更新（meta.json 的 min_supported_version）。
 # 必须在每次请求里带上，否则网关无法识别旧版客户端（缺头时网关一律放行，避免误伤 API 用户）。
-OWL_SKILL_VERSION = "1.1.0"
+# ⚠️ 发布前必须与 SKILL.md 的 version / meta.json latest_version 三处对齐（preflight A20 守门），
+#    否则装的是最新版也会被网关判成旧版（假提示，严重时 426 全停）。
+OWL_SKILL_VERSION = "1.1.2"
 
 mcp = MCPServer(
     "owlwrite",
@@ -82,22 +85,28 @@ async def _call(method: str, path: str, body: dict | None = None, params: dict |
         data = r.json()
     except Exception:
         data = {"raw": r.text[:500]}
-    if r.status_code >= 400:
-        # 错误结构化透传，不包装不吞——Agent 按 code 分支处理
-        err = data.get("detail") if isinstance(data.get("detail"), dict) else data
-        code = (err or {}).get("code", f"http_{r.status_code}")
-        msg = (err or {}).get("message") or str(data)[:300]
-        extra = {k: v for k, v in (err or {}).items()
-                 if k not in ("code", "message") and k not in ("detail",)}
-        # ToolError → 客户端收到 is_error=True + 我们的 JSON 消息，无 traceback 污染流
-        raise ToolError(json.dumps(
-            {"error": code, "message": msg, "http_status": r.status_code, **extra},
-            ensure_ascii=False))
+    # 错误结构化透传，不包装不吞——Agent 按 code 分支处理；
+    # ToolError → 客户端收到 is_error=True + JSON 消息，无 traceback 污染流
+    _raise_if_error(r, data)
     return data
 
 
 def _dump(d) -> str:
     return json.dumps(d, ensure_ascii=False, indent=1)
+
+
+def _raise_if_error(r, data) -> None:
+    """统一错误透传：网关 code/message/extra 原样抛给 Agent，不包装不吞。"""
+    if r.status_code < 400:
+        return
+    err = data.get("detail") if isinstance(data.get("detail"), dict) else data
+    code = (err or {}).get("code", f"http_{r.status_code}")
+    msg = (err or {}).get("message") or str(data)[:300]
+    extra = {k: v for k, v in (err or {}).items()
+             if k not in ("code", "message") and k not in ("detail",)}
+    raise ToolError(json.dumps(
+        {"error": code, "message": msg, "http_status": r.status_code, **extra},
+        ensure_ascii=False))
 
 
 # ---------------- 工具定义 ----------------
@@ -167,15 +176,54 @@ async def owl_quote(action: str, params: dict) -> str:
     Args:
         action: "write" | "check" | "verify"
           - write: params = {"topic": 题目, "mode": standard|guided, "target_chars": 目标字数}
-          - check: params = {"content": 全文文本, "product": 商品 code（先调 owl_products 获取）}
+          - check: params = {"file_id": 已上传文件编号, "product": 商品 code, "hanzi": 汉字数,
+                             "title": 题名, "author": 作者}
+                    纯文本可直接用 {"content": 全文, "product": ...}（网关落成 docx 走真实解析）；
+                    图像 / 格式检测必须给 file_id（先 owl_upload 上传本机文件）。
+                    product 先调 owl_products 获取，去掉 `wp.` 前缀只留裸编码。
           - verify: params = {"refs_text": 参考文献编号列表文本(GB/T 7714), "lang": zh|en|auto}
         params: 上述参数字典。
 
     礼仪（技能文档强制）：拿到报价先告知用户价格，经同意再 owl_run。不要默默扣费。
-    写作报价是**估算**（billing_mode=postpaid）：积分估算仅作参考，以实际扣除为准
-    （按实际成文字数精确结算，无冻结、无上限）。
+    写作与检测都是**后付费**（billing_mode=postpaid）：积分估算仅作参考，以实际扣除为准
+    （按实际成文字数 / 解析出的真实字符数精确结算，无冻结、无上限）。
     """
     return _dump(await _call("POST", "/v1/quote", {"action": action, "params": params}))
+
+
+@mcp.tool()
+async def owl_upload(file_path: str) -> str:
+    """上传本机文件到网关，返回 file_id（检测 / 图像 / 格式检测必用）。
+
+    为什么需要：网关在云端，读不到你本机的 D:/… 路径。先上传拿 file_id，
+    再把它放进 owl_quote 的 check 参数（同时给 hanzi 汉字数才能出价）。
+    只传纯文本的可以用 content 直传，不必上传。
+
+    Args:
+        file_path: 本机文件的绝对路径（docx / doc / pdf / txt / png / jpg / tif）。
+    """
+    p = os.path.expanduser(str(file_path or "").strip().strip('"'))
+    if not os.path.isfile(p):
+        raise ToolError(json.dumps({"error": "file_not_found",
+                                    "message": f"本机找不到这个文件：{p}"}, ensure_ascii=False))
+    size = os.path.getsize(p)
+    if size > 30 * 1024 * 1024:
+        raise ToolError(json.dumps({"error": "file_too_large",
+                                    "message": "文件超过 30MB，请压缩或只提交正文部分"},
+                                   ensure_ascii=False))
+    name = urllib.parse.quote(os.path.basename(p))
+    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0)) as c:
+        with open(p, "rb") as f:
+            r = await c.post(OWL_BASE + "/v1/files", content=f.read(),
+                             headers={**_headers(), "X-Filename": name,
+                                      "Content-Type": "application/octet-stream"})
+    try:
+        data = r.json()
+    except Exception:
+        data = {"raw": r.text[:500]}
+    _raise_if_error(r, data)
+    return _dump({**data, "next": "把这个 file_id 放进 owl_quote 的 params.file_id，"
+                                  "同时给 hanzi（汉字数）才能出价"})
 
 
 @mcp.tool()
@@ -189,29 +237,63 @@ async def owl_run(quote_id: str) -> str:
 
 @mcp.tool()
 async def owl_run_status(run_id: str) -> str:
-    """查询任务状态与进度。status: queued/running/succeeded/failed/cancelled。
+    """查询任务状态与进度。status: queued/running/succeeded/failed/cancelled/pending_upstream。
 
+    pending_upstream = 上游已收单、报告仍在生成（**不是失败**），稍后再查即可，别重建单。
     建议 3-5 秒轮询一次；succeeded 后 result 里是成品（写作正文截断在 2000 字，
-    完整全文用 owl_run_content 取回后落盘；核验报告用 owl_run_report）。
+    完整全文用 owl_run_content 取回后落盘；核验/检测报告用 owl_run_report）。
     """
     return _dump(await _call("GET", f"/v1/runs/{run_id}"))
 
 
 @mcp.tool()
-async def owl_run_report(run_id: str) -> str:
-    """获取核验（verify）任务的结果摘要（其他动作返回无 items 的提示）。
+async def owl_run_report(run_id: str, part: str = "") -> str:
+    """获取任务报告。核验（verify）给逐条判定摘要；检测（check）给结论 + 多份报告链接。
 
-    返回：判定统计 + 逐条简报（判定/题名/差异说明）。逐条差异直接告诉用户怎么改；
-    完整 HTML 报告在返回的 report_url（浏览器打开）。
+    part 仅对检测类有效，可选：main（默认，综合报告 HTML）、compare（比对报告 HTML）、
+    simple（简洁版 PDF）、fulltext（原文对照 PDF）。
+    返回的 report_url 用浏览器打开即可；要把报告写进文档/交付给用户时，
+    按 part 取对应链接（例如需要 PDF 就用 simple 或 fulltext）。
     """
     data = await _call("GET", f"/v1/runs/{run_id}")
+    status, action = data.get("status"), data.get("action")
     result = data.get("result") or {}
+    base = f"{OWL_BASE}/v1/runs/{run_id}/report"
+
+    # 检测类：4 份报告 + 结论摘要（原来这里一律返回「尚无核验结果」，等于对检测单失明）
+    if action == "check":
+        rep = result.get("report") or {}
+        files = rep.get("files") or []
+        parts = {f.get("kind"): f.get("file") for f in files
+                 if f.get("kind") and not str(f.get("kind")).startswith("other")}
+        if not parts:
+            parts = {"main": "", "compare": "", "simple": "", "fulltext": ""}
+        pick = (part or "main").strip().lower()
+        if pick not in parts:
+            return _dump({"run_id": run_id, "status": status, "error": "unknown_part",
+                          "available_parts": sorted(parts)})
+        url_of = lambda k: base if k == "main" else f"{base}?part={k}"
+        return _dump({
+            "run_id": run_id, "status": status, "action": "check",
+            "headline": result.get("headline"),
+            "result_mode": result.get("result_mode"),
+            "repeat_rate": result.get("repeat_rate"),
+            "grade": result.get("grade"),
+            "error_count": result.get("error_count"),
+            "word_count": result.get("word_count"),
+            "num": result.get("num"),
+            "report_status": rep.get("status") or "unknown",
+            "report_url": url_of(pick),
+            "available_parts": {k: url_of(k) for k in sorted(parts)},
+            "report_tip": "检测类共 4 份：综合(HTML)/比对(HTML)/简洁(PDF)/原文对照(PDF)",
+        })
+
     items = result.get("items") or []
     summary = result.get("summary") or {}
     if not items:
         return _dump({"run_id": run_id, "status": data.get("status"),
                       "note": "任务尚无核验结果（未完成或非 verify 任务）",
-                      "report_url": f"{OWL_BASE}/v1/runs/{run_id}/report"})
+                      "report_url": base})
     s = summary
     head = (f"共 {s.get('total')} 条：已证实 {s.get('verified')}，元数据不符 "
             f"{s.get('metadata_mismatch')}，疑似匹配 {s.get('likely')}，存疑 "

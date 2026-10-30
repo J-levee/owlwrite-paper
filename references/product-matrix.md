@@ -80,23 +80,27 @@
 3. **只推 1–2 个**：定稿查重 + AIGC；投稿前格式 + 智评期刊版；被质疑图像 → 图像专业版。
 4. 报「价格 · 出结果时长 · 能解决什么」，让用户自己点头。
 
-## 八、共用参数（两种入参，文件优先）
+## 八、共用参数（有文件先上传）
 
+`owl_upload(file_path="D:/论文/定稿.docx")` → 拿到 `file_id`，再
 `owl_quote`，`action: "check"`，params：
 
 ```json
-{"file_path": "D:/论文/定稿.docx", "product": "1034", "title": "论文标题", "author": "作者"}
+{"file_id": "u12_3f9c…a1.docx", "product": "1034", "hanzi": 15453, "title": "论文标题", "author": "作者"}
 {"content": "论文全文纯文本", "product": "1026", "class_id": 508, "title": "论文标题", "author": "作者"}
 ```
 
-- **`file_path`（推荐）**：本机文件绝对路径（docx / pdf / txt），MCP 进程能读到即可。
-  报价阶段不解析文件：只给 `file_path` 会 422，必须同时给 `hanzi`（汉字数）才出价；执行时以上游解析的真实字数为准，超出以冻结上限封顶、不加收。
-- **`content`**：纯文本，按汉字数 ×1.78 估算，只是估值。
-- **图像可信度（1015/1018）必须 `file_path`**，且给含原始图的源文件；给截图或纯文本等于没测。
+- **`file_id`（有文件就走这条）**：本机文件先 `owl_upload` 上传换编号（≤30MB，docx/doc/pdf/txt 或 png/jpg/tif）。
+  网关在云端读不到用户本机路径，直接把本机路径当参数传没用。
+- **`hanzi`（汉字数）报价必给**：报价阶段不解析文件，只给 `file_id` 会 422。
+  它只用于出价，执行时以**解析出的真实字符数**为准——多就按多的收、少就按少的收，**无封顶、无下限**。
+- **`content`**：纯文本直传（网关包成 docx 走同样的真实解析），≤20 万字符，不必上传。
+- **图像可信度（1015/1018）必须走 `file_id`**，且给含原始图的源文件；给截图或纯文本等于没测。
 - `class_id` 仅智评需要（学科编码，如 508 = 计算机科学与技术）；缺了会挂。
 - `title` / `author` 缺了报告会显示「未命名稿件」。
 - 按篇计费商品（`count_unit=1`）不论字数都算 1 篇；查重系列按字符（3 元/千字符）。
 
-返回：`quote_id` + `est_points`（讲这个）+ `max_points`（冻结上限，1.5×，差额退回）。
-`owl_run(quote_id)` 执行；`owl_run_status(run_id)` 轮询；报告落 `04-检测/<品名>-<日期>/`。
-**报价 30 分钟内有效。**
+返回：`quote_id` + `est_points`（讲这个）。`max_points` 已废除，没有冻结上限。
+`owl_run(quote_id)` 执行；`owl_run_status(run_id)` 轮询；`owl_run_report(run_id, part)` 取报告
+（`main` 综合 / `compare` 逐句比对 / `simple` 简洁 PDF / `fulltext` 原文对照 PDF），落 `04-检测/<品名>-<日期>/`。
+**报价 24 小时内有效。**

@@ -43,6 +43,8 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 - `OWL_BASE` 固定填 **`https://owl.skillsutra.cn`**（API 网关）。官网是 `paper.skillsutra.cn`，
   两者不同域，填错会连不上。
 - Python ≥ 3.11，需 `pip install mcp httpx`。
+- **上传大文件把客户端超时放宽**：`owl_upload` 传 30MB 论文在上行慢的网络可能超过 30 秒，
+  远程接入时把 `timeout` 设到 `120000`（毫秒），否则会在本地先超时而服务端其实已收下。
 
 ### 配好后验证与冷启动注意
 
@@ -56,7 +58,7 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 - **版本判定**：`owl_meta` 的 `required_update=true` 且本地版本低于 `min_supported_version`
   时必须先让用户更新技能再继续付费动作。
 
-## 3. 工具一览（18 个）
+## 3. 工具一览（19 个）
 
 | 工具 | 作用 | 计费 |
 |---|---|---|
@@ -70,10 +72,11 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 | `owl_meta` | 技能最新版本 + 平台公告（开工校准；含 `channels.weipu_ready` 检测通道状态） | 免费 |
 | `owl_disciplines` | 斟知智评学科码表（class_id 用，逐级筛给用户选） | 免费 |
 | `owl_campaign` | 活动券码兑换 / 我的邀请码与战绩 | 免费 |
-| `owl_quote` | 写作 / 检测 / 核验报价（写作返回预估区间） | 免费（不扣积分） |
-| `owl_run` | 执行已报价任务 | 写作按实际成文字数结算（超出报价上限不加收），其余按报价 |
-| `owl_run_status` | 轮询任务状态 | 免费 |
-| `owl_run_report` | 核验逐条判定 + 报告链接 | 免费 |
+| `owl_upload` | 上传本机文件换 `file_id`（检测 / 图像 / 格式检测必用；≤30MB） | 免费 |
+| `owl_quote` | 写作 / 检测 / 核验报价（返回预估区间；检测需给 `hanzi`） | 免费（不扣积分） |
+| `owl_run` | 执行已报价任务 | 写作/检测按**实际量**结算（无冻结、无封顶），其余按报价 |
+| `owl_run_status` | 轮询任务状态（含 `pending_upstream`＝报告仍在生成，不是失败） | 免费 |
+| `owl_run_report` | 核验逐条判定；检测报告四份（`part=main` 综合 / `compare` 逐句比对 / `simple` 简洁 PDF / `fulltext` 原文对照 PDF） | 免费 |
 | `owl_run_content` | 写作完整正文与参考文献 | 免费 |
 | `owl_wallet` | 查余额（含 30 天内到期积分、赠送积分余额） | 免费 |
 | `owl_recharge` | 发起充值（10/30/50/100/500 元） | 免费 |
