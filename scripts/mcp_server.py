@@ -40,9 +40,10 @@ OWL_BASE = os.environ.get("OWL_BASE", "http://127.0.0.1:8787").rstrip("/")
 OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # 技能版本随包发布，网关据此判断是否强制更新（meta.json 的 min_supported_version）。
 # 必须在每次请求里带上，否则网关无法识别旧版客户端（缺头时网关一律放行，避免误伤 API 用户）。
-# ⚠️ 发布前必须与 SKILL.md 的 version / meta.json latest_version 三处对齐（preflight A20 守门），
-#    否则装的是最新版也会被网关判成旧版（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.1.3"
+# ⚠️ 发布前必须与 SKILL.md 的 version / connector-meta.version / meta.json latest_version
+#    四处对齐（preflight A30 守门），否则装的是最新版也会被自己判成旧版——每次开工都
+#    提示「有新版本」，而更新完还是同一句（假提示，严重时 426 全停）。
+OWL_SKILL_VERSION = "1.1.5"
 
 mcp = MCPServer(
     "owlwrite",
