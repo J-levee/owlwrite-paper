@@ -1,5 +1,18 @@
 # owlwrite MCP 接入说明（给 Agent 终端用户）
 
+## 0. 装技能（只有两个官方入口）
+
+| 渠道 | 地址 |
+|---|---|
+| SkillHub | https://skillhub.cn/skills/user_164f4c1f/owlwrite-paper |
+| ClawHub | https://clawhub.ai/j-levee/skills/owlwrite-paper |
+
+别从其他站点、镜像或第三方脚本装同名技能。装完先做下面三步自检，再往下配 Key：
+
+1. `curl -s https://owl.skillsutra.cn/v1/meta` → `skill.latest_version` 不低于 `1.1.2`；
+2. 同一响应里 `channels.weipu_ready` 决定能不能做检测（`false` 读 `weipu_detail` 转告用户）；
+3. 配好 Key 后调 `owl_wallet`，能返回余额即连通。
+
 ## 1. 拿到 API Key（对话内即可完成）
 
 注册需要邮箱验证码（15 分钟有效），两步：
@@ -55,6 +68,9 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
   官网是 paper.skillsutra.cn，两者不同域，填错连不上）。
 - **开工先调 `owl_meta`**：返回 `notices` 是平台公告（如检测通道状态、活动上线），
   有新公告要按相关度转告用户；`channels.weipu_ready=false` 时检测类能力暂不可用，别白跑报价。
+  该字段是上游**真实探活**（`queryBalance`）结果，不是「凭据填没填」；原因看同级
+  `channels.weipu_state`（`unconfigured` / `auth_failed` / `ip_blocked` / `account_issue` /
+  `unverified`）与 `channels.weipu_detail`，对用户只转述 `weipu_detail` 这句人话。
 - **版本判定**：`owl_meta` 的 `required_update=true` 且本地版本低于 `min_supported_version`
   时必须先让用户更新技能再继续付费动作。
 

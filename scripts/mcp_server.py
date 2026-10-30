@@ -42,7 +42,7 @@ OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # 必须在每次请求里带上，否则网关无法识别旧版客户端（缺头时网关一律放行，避免误伤 API 用户）。
 # ⚠️ 发布前必须与 SKILL.md 的 version / meta.json latest_version 三处对齐（preflight A20 守门），
 #    否则装的是最新版也会被网关判成旧版（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.1.2"
+OWL_SKILL_VERSION = "1.1.3"
 
 mcp = MCPServer(
     "owlwrite",
@@ -146,11 +146,16 @@ async def owl_meta() -> str:
     """技能版本与平台公告。**每次会话开工时必调一次**，按三级判定处理返回：
 
     1) required_update=true 且本地版本 < min_supported_version → **必须停止后续付费动作**，
-       先让用户更新技能（SkillHub / ClawHub 搜 owlwrite-paper 重装，余额与数据不受影响），
+       先让用户更新技能（只有两个官方入口：SkillHub https://skillhub.cn/skills/user_164f4c1f/owlwrite-paper
+       或 ClawHub https://clawhub.ai/j-levee/skills/owlwrite-paper，余额与数据不受影响），
        并把 required_reason 原话说给用户听；
     2) 仅 latest_version 更高 → 一句话提示可更新，**不阻塞**本次任务；
     3) 版本一致 → 静默，不打扰用户。
-    notices 里有新公告时按相关度转告。"""
+    notices 里有新公告时按相关度转告。
+
+    检测类任务开工前看 channels.weipu_ready：它是上游**真实探活**结果（不是「凭据填没填」）。
+    为 false 时读同级 channels.weipu_detail（一句人话）转告用户，别把 weipu_state 的内部码念给他；
+    只有 true 才去报价，否则白跑一趟。"""
     return _dump(await _call("GET", "/v1/meta"))
 
 

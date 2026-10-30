@@ -2,27 +2,30 @@
 
 > 面向 AI Agent 的论文全流程技能包：**找文献 → 写初稿 → 跑检测 → 核引文**，全程在对话里完成，产物落到用户自己的电脑。
 
-- 版本：**1.1.2**
+- 版本：**1.1.3**
 - 官网与实时价目：https://paper.skillsutra.cn （价目页 `/price`，一切报价以接口实时返回为准）
 - 服务端点：https://owl.skillsutra.cn （MCP / HTTP 网关）
 
-## 能力
+## 安装（两个官方入口，任选其一）
 
-| 类别 | 工具 | 说明 |
-|---|---|---|
-| 文献 | `owl_search` `owl_article` `owl_fulltext` `owl_oa` `owl_citations` | 中外文检索、详情、中文授权全文、外文 OA 免费全文、引文追溯 |
-| 写作 | `owl_quote` `owl_run` `owl_run_status` `owl_run_content` | 一次性连续成文，按实际成文字数结算 |
-| 配图 | `owl_figure` | TikZ 矢量示意 / 数据图表 / AI 配图，按实际交付张数结算 |
-| 检测 | `owl_products` `owl_quote` `owl_run` `owl_run_report` | 查重、AIGC、格式、智评、图像可信度、文献质量、斟校对（21 个商品，检测经 `owl_quote`(check) 下单） |
-| 核验 | `owl_quote`(verify) `owl_run` `owl_run_report` | 逐条核对引文元数据，附撤稿徽标 |
-| 账户 | `owl_wallet` `owl_recharge` `owl_recharge_status` `owl_campaign` `owl_meta` | 余额、充值、券码、版本公告 |
+| 渠道 | 地址 |
+|---|---|
+| SkillHub | https://skillhub.cn/skills/user_164f4c1f/owlwrite-paper |
+| ClawHub | https://clawhub.ai/j-levee/skills/owlwrite-paper |
 
-共 **17 个 MCP 工具**。
+> 只有这两个入口。其他站点、镜像、第三方脚本或同名仿制品都不代表本服务。
 
-## 安装
+装完自检四步：
 
-1. 把本仓库内容放到你的 Agent 的技能目录（保留 `SKILL.md`、`references/`、`scripts/` 结构）。
-2. 在 MCP 客户端配置里指向 `scripts/mcp_server.py`，并填自己的 API Key：
+1. `GET https://owl.skillsutra.cn/v1/meta` → `skill.latest_version` 不低于 `1.1.2`；
+2. 同一响应的 `channels.weipu_ready` 为 `true` 才做检测类任务，为 `false` 时读 `channels.weipu_detail` 如实告知用户；
+3. 调 `owl_wallet` 能返回余额 → API Key 与网关连通；
+4. `owl_*` 工具共 19 个（含 `owl_upload`，本机文件上传换 `file_id`）。
+
+### 手动装（离线 / 自建宿主）
+
+1. 把本仓库内容放到 Agent 的技能目录（保留 `SKILL.md`、`references/`、`scripts/` 结构）。
+2. MCP 客户端配置指向 `scripts/mcp_server.py`，填自己的 API Key：
 
 ```json
 {
@@ -40,10 +43,23 @@
 
 详细步骤见 [`references/mcp-setup.md`](references/mcp-setup.md)，商品与能力边界见 [`references/product-matrix.md`](references/product-matrix.md) 与 [`references/coverage.md`](references/coverage.md)。
 
+## 能力
+
+| 类别 | 工具 | 说明 |
+|---|---|---|
+| 文献 | `owl_search` `owl_article` `owl_fulltext` `owl_oa` `owl_citations` | 中外文检索、详情、中文授权全文、外文 OA 免费全文、引文追溯 |
+| 写作 | `owl_quote` `owl_run` `owl_run_status` `owl_run_content` | 一次性连续成文，按实际成文字数结算 |
+| 配图 | `owl_figure` | TikZ 矢量示意 / 数据图表 / AI 配图，按实际交付张数结算 |
+| 检测 | `owl_upload` `owl_products` `owl_quote` `owl_run` `owl_run_report` | 查重、AIGC、格式、智评、图像可信度、文献质量、斟校对（21 个商品）；本机文件先 `owl_upload` 换 `file_id` 再报价；报告四份 `part=main\|compare\|simple\|fulltext` |
+| 核验 | `owl_quote`(verify) `owl_run` `owl_run_report` | 逐条核对引文元数据，附撤稿徽标 |
+| 账户 | `owl_wallet` `owl_recharge` `owl_recharge_status` `owl_campaign` `owl_meta` `owl_disciplines` | 余额、充值、券码、版本公告与通道状态、学科码表 |
+
+共 **19 个 MCP 工具**。
+
 ## 计费原则
 
-- 1 积分 = 0.01 元；**先报价、用户确认、再执行**，不静默扣费。
-- 检索按命中三态计费（命中 / 缓存 / 无结果），写作按实际成文字数结算（超出预估以冻结上限为限，不加收），配图按实际交付张数结算（未出图不收费）。
+- 1 积分 = 0.01 元；**先报价、用户确认、再执行**，不静默扣费；报价 24 小时内有效。
+- 写作与检测均为**后付费**：开工前只做余额软预检（不足按差额拦截），**不冻结任何积分**；结束后按实际量结算——写作按实际成文字数、检测按解析出的真实字符数，**无封顶、无下限**。配图按实际交付张数结算（未出图不收费）。
 - 具体单价一律以 `owl_products` / 官网 `/price` 实时返回为准，本仓库不写死价格。
 
 ## 合规
