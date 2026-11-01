@@ -202,6 +202,22 @@ async def owl_quote(action: str, params: dict) -> str:
     return _dump(await _call("POST", "/v1/quote", {"action": action, "params": params}))
 
 
+def _docx_hanzi(path: str) -> int:
+    """数 .docx 正文汉字数，口径与网关一致（800 汉字 ≈ 1 页）。
+
+    报价要先于执行给出，而 docx 的页数只能从正文来：网关在 /v1/typeset 里会自己再数一遍
+    （客户端申报不可信），这里数是为了让「先告诉用户多少钱」这一步的数字与最终扣费一致。
+    """
+    try:
+        import re as _re
+        import zipfile
+        with zipfile.ZipFile(path) as z:
+            xml = z.read("word/document.xml").decode("utf-8", "ignore")
+        return len(_re.findall(r"[\u4e00-\u9fff]", _re.sub(r"<[^>]+>", "", xml)))
+    except Exception:  # noqa: BLE001 — 读不出来就让调用方回退到用户申报的页数
+        return 0
+
+
 async def _upload_local(file_path: str, max_mb: int = 60) -> dict:
     """把本机文件传上去。排版包（含图/字体）天然比单个文档大，上限抬到 60MB。
 
@@ -436,13 +452,14 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
             **工程可以放在文件夹里**（如 论文/main.tex），服务端会自动找主文件。
         template_path: 学校模板 .docx（学校研究生院官网下载的那种），docx 模式必填。
         entry: 仅 latex 模式：主文件名，如 "main.tex"。工程里只有一个 .tex 时可省略。
-        pages: 正文页数（报价分档用，latex 建议给）。
-        hanzi: 全文汉字数（docx 模式必给，用于分档与进度预估）。
+        pages: 正文页数（latex 必给；docx 给了也以网关从正文数出的为准）。
+        hanzi: 全文汉字数（docx 可不给：本工具会直接从 .docx 正文里数）。
         title: 论文题目（会印在封面/页眉，不给则用文件里的）。
         file_id / template_file_id: 已经用 owl_upload 传过的文件编号（与路径二选一）。
 
-    计费：按篇一口价（¥5.9–¥19.9 区间按页数分档），**报价即最终价**。
-    30 天内同一份稿（含同一模板）改格式重排只收 1 积分工本 —— 所以用户想改版式可以放心重排。
+    计费：按篇一口价，按页数分档，**具体积分一律以 owl_quote 实时返回的 est_points 为准**
+    （本工具不写死任何价格数字，你也不要凭印象报价）。报价即最终价，之后不会补收。
+    72 小时内同一份稿（含同一模板）改格式重排只收 1 积分工本 —— 所以用户想改版式可以放心重排。
     排版失败不收费。调用前请先把价格告诉用户并得到同意，不要默默扣费。
 
     返回：pdf_url / docx_url（7 天有效直链，可直接下载）、checklist（格式体检单：
@@ -454,11 +471,28 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
     if mode not in ("latex", "docx"):
         return _dump({"error": "bad_params", "message": "mode 只能是 latex 或 docx"})
 
+    # 灰度守卫必须在上传之前：先传 60MB 工程包、再被 503 拒，等于让用户白等一场
+    try:
+        meta = await _call("GET", "/v1/meta")
+        ch = (meta or {}).get("channels") or {}
+        if ch.get("typeset_ready") is not True:
+            return _dump({"error": "typeset_disabled",
+                          "message": (ch.get("typeset_detail")
+                                      or "排版功能还在灰度中，暂未对外开放"),
+                          "tip": "如实告诉用户当前不可用即可；不要报价、不要让用户打包或上传。"})
+        if mode == "docx" and ch.get("typeset_docx_ready") is False:
+            return _dump({"error": "typeset_docx_disabled",
+                          "message": "Word 按模板排版这条通路暂未开放，目前只支持 LaTeX 工程包"})
+    except Exception:  # noqa: BLE001 — 网关读不到状态时不阻断，交给后面的真实调用暴露问题
+        pass
+
     if not file_id:
         if not file_path:
             return _dump({"error": "bad_params",
                           "message": "请给 file_path（本机文件）或 file_id（已上传）"})
         file_id = (await _upload_local(file_path))["file_id"]
+        if mode == "docx" and not hanzi:
+            hanzi = _docx_hanzi(file_path)
     if mode == "docx" and not template_file_id:
         if not template_path:
             return _dump({"error": "bad_params",
@@ -472,8 +506,17 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
         qparams["pages"] = int(pages)
     if hanzi:
         qparams["hanzi"] = int(hanzi)
-    quote = await _call("POST", "/v1/quote", {"action": "typeset", "params": qparams})
+    try:
+        quote = await _call("POST", "/v1/quote", {"action": "typeset", "params": qparams})
+    except Exception as exc:  # noqa: BLE001 — 页数没给 / 灰度未开，都在这里显性化
+        return _dump({"error": "quote_failed",
+                      "message": str(exc)[:300],
+                      "tip": "latex 模式必须带 pages（正文页数）；docx 模式请确认文件是 .docx 且没加密。"})
     body = {"file_id": file_id, "mode": mode, "quote_id": (quote or {}).get("quote_id", "")}
+    if pages:
+        body["pages"] = int(pages)
+    if hanzi:
+        body["hanzi"] = int(hanzi)
     if template_file_id:
         body["template_file_id"] = template_file_id
     if entry:
