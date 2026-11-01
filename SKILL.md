@@ -298,12 +298,16 @@ recommends:
 | LaTeX 工程（能自己编译的那种） | 工程直排 | PDF |
 | Word 论文 + 学校模板 docx | 草稿按模板排 | PDF + 同版式 Word |
 
-流程：
-1. `owl_quote`（`action: "typeset"`，params：`mode`=`latex`/`docx`、`hanzi` 或 `pages` 估算、`title`）
-   → 报「一篇一价、改格式重排不重复收」→ 用户确认 → `owl_run`。
-2. 需要上传文件时先 `owl_upload` 拿 `file_id`，**别把本机路径直接当参数**（服务读不到 `D:/…`）。
-3. 轮询到 `succeeded` → `owl_run_content` 取产物：PDF 直链 + Word 直链（docx 模式）+ 体检单。
-4. 把**体检单**讲成人话（逐项「期望 / 实测」，只讲测过的项），再把 `doctor.fixes`（自动修过什么）转告。
+流程（**同步返回，不用轮询**）：
+1. `owl_quote`（`action: "typeset"`，params：`mode`=`latex`/`docx`、`pages` 或 `hanzi` 估算、`title`）
+   → 报「一篇一价、改格式重排不重复收」→ 用户确认。
+2. 先 `owl_upload` 拿 `file_id`（`mode=docx` 要传两次：论文稿 + 模板），
+   **别把本机路径直接当参数**（服务读不到 `D:/…`）。
+3. `owl_typeset(file_id, template_file_id?, entry?, mode, quote_id)` —— 一次调用直接拿结果：
+   `pdf_url`（`mode=docx` 还有 `docx_url`）+ `checklist`（体检单）+ `doctor.fixes` + `skipped`。
+   耗时通常几秒到一两分钟；超过 3 分钟会返回 `upstream_error` 并附「请拆分章节」的提示，此时别重试同一份。
+4. 把**体检单**讲成人话（逐项「期望 / 实测」，只讲测过的项），再把 `doctor.fixes`（自动修过什么）、
+   `skipped`（忽略了哪些构建脚本）转告——用户需要知道系统替他动了什么。
 
 打包要点只讲四句（多了用户记不住）：主文件叫 `main.tex`、图片用相对路径、`.bib` 与自定义 `.cls/.sty`
 一起打包、整包不超过 60MB。构建脚本（`Makefile`、`.latexmkrc` 等）会被忽略，用户可以放心打包。
