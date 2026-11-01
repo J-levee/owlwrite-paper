@@ -290,6 +290,7 @@ recommends:
 **第一步永远是判开放**：`owl_meta` 的 `channels.typeset_ready` 为 `true` 才继续；
 为 `false` 或字段不存在 → 一句话如实说「排版功能正在灰度开放中，还没有对你的账号开通」，
 **不报价、不让用户打包、不让用户等**。别把它当成"应该能用"去试。
+（`channels.typeset_docx_ready` 为 `false` 时只支持 LaTeX 工程，Word 稿这条路暂时走不了。）
 
 用户手上的东西决定走哪条路：
 
@@ -298,19 +299,29 @@ recommends:
 | LaTeX 工程（能自己编译的那种） | 工程直排 | PDF |
 | Word 论文 + 学校模板 docx | 草稿按模板排 | PDF + 同版式 Word |
 
-流程（**同步返回，不用轮询**）：
-1. `owl_quote`（`action: "typeset"`，params：`mode`=`latex`/`docx`、`pages` 或 `hanzi` 估算、`title`）
-   → 报「一篇一价、改格式重排不重复收」→ 用户确认。
-2. 先 `owl_upload` 拿 `file_id`（`mode=docx` 要传两次：论文稿 + 模板），
-   **别把本机路径直接当参数**（服务读不到 `D:/…`）。
-3. `owl_typeset(file_id, template_file_id?, entry?, mode, quote_id)` —— 一次调用直接拿结果：
-   `pdf_url`（`mode=docx` 还有 `docx_url`）+ `checklist`（体检单）+ `doctor.fixes` + `skipped`。
-   耗时通常几秒到一两分钟；超过 3 分钟会返回 `upstream_error` 并附「请拆分章节」的提示，此时别重试同一份。
-4. 把**体检单**讲成人话（逐项「期望 / 实测」，只讲测过的项），再把 `doctor.fixes`（自动修过什么）、
-   `skipped`（忽略了哪些构建脚本）转告——用户需要知道系统替他动了什么。
+流程（**一次调用拿到结果，不用轮询**）：
+
+1. **先报价、先说价、得到同意再执行**：`owl_quote`（`action: "typeset"`，
+   params：`mode`=`latex`/`docx`、`pages` 或 `hanzi`）→ 把 `est_points` 折成钱告诉用户
+   （1 积分 = 0.01 元），并说清「按篇一口价，改格式重排不重复收」。
+2. `owl_typeset(file_path, mode, template_path?, entry?, pages/hanzi, title)`
+   —— **把本机文件路径直接给它**，上传由工具内部完成（服务读不到 `D:/…`，但你不必自己先传）。
+   已经用 `owl_upload` 传过的，也可以改成传 `file_id` / `template_file_id`。
+   `mode=docx` 必须同时给 `template_path`（学校研究生院官网下的那种 docx）。
+3. 返回里直接就有结果：`pdf_url`（`mode=docx` 还有 `docx_url`）、`checklist`（体检单）、
+   `needs_confirm`（模板里没看准的少数几项）、`doctor.fixes`（自动修过什么）、
+   `skipped`（忽略了哪些构建脚本）、`points_charged`（实扣）。
+4. **把体检单讲成人话**：逐项「期望 / 实测」，只讲返回里出现的项；
+   ⚠ 项要说清哪一项不一致、差多少、怎么改。再把 `doctor.fixes` 与 `skipped` 转告——
+   用户需要知道系统替他动了什么、忽略了什么，否则会怀疑文件被改。
+5. `needs_confirm` 只有几条，**一次问完**（"你们学校一级标题是黑体还是宋体？"），
+   不要拿 30 个参数去问用户。用户答完就按他的说法重排（同一份稿，只收工本）。
+
+耗时通常几秒到一两分钟；超过 3 分钟会返回 `upstream_error` 并附「请拆分章节」的提示，此时别重试同一份。
 
 打包要点只讲四句（多了用户记不住）：主文件叫 `main.tex`、图片用相对路径、`.bib` 与自定义 `.cls/.sty`
-一起打包、整包不超过 60MB。构建脚本（`Makefile`、`.latexmkrc` 等）会被忽略，用户可以放心打包。
+一起打包、整包不超过 60MB。工程放在文件夹里打包也行（`论文/main.tex` 会自动找到）；
+构建脚本（`Makefile`、`.latexmkrc` 等）会被忽略，用户可以放心打包。
 
 **能力边界**：不做内容改写、不代写；`.eps` 请转 pdf/png；需要联网的宏包和 `\write18` 一律用不了；
 扫描件、加密文件、带宏的 docm 直接说做不了。完整说明与失败话术见 `references/typeset.md`。

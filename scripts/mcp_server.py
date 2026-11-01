@@ -82,8 +82,9 @@ def _headers() -> dict:
             "X-Owl-Skill-Version": OWL_SKILL_VERSION}
 
 
-async def _call(method: str, path: str, body: dict | None = None, params: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+async def _call(method: str, path: str, body: dict | None = None, params: dict | None = None,
+                timeout: float | None = None) -> dict:
+    async with httpx.AsyncClient(timeout=timeout or _TIMEOUT) as c:
         r = await c.request(method, OWL_BASE + path,
                             json=body, params=params, headers=_headers())
     try:
@@ -201,25 +202,22 @@ async def owl_quote(action: str, params: dict) -> str:
     return _dump(await _call("POST", "/v1/quote", {"action": action, "params": params}))
 
 
-@mcp.tool()
-async def owl_upload(file_path: str) -> str:
-    """上传本机文件到服务端，返回 file_id（检测 / 图像 / 格式检测必用）。
+async def _upload_local(file_path: str, max_mb: int = 60) -> dict:
+    """把本机文件传上去。排版包（含图/字体）天然比单个文档大，上限抬到 60MB。
 
-    为什么需要：服务在云端，读不到你本机的 D:/… 路径。先上传拿 file_id，
-    再把它放进 owl_quote 的 check 参数（同时给 hanzi 汉字数才能出价）。
-    只传纯文本的可以用 content 直传，不必上传。
-
-    Args:
-        file_path: 本机文件的绝对路径（docx / doc / pdf / txt / png / jpg / tif）。
+    网关侧按扩展名再判一次上限：.zip=60MB，其它=30MB；这里只是提前给出可读的报错，
+    避免用户传了 55MB 的 zip 才发现服务端不认。
     """
     p = os.path.expanduser(str(file_path or "").strip().strip('"'))
     if not os.path.isfile(p):
         raise ToolError(json.dumps({"error": "file_not_found",
                                     "message": f"本机找不到这个文件：{p}"}, ensure_ascii=False))
     size = os.path.getsize(p)
-    if size > 30 * 1024 * 1024:
+    limit = max_mb if p.lower().endswith(".zip") else 30
+    if size > limit * 1024 * 1024:
         raise ToolError(json.dumps({"error": "file_too_large",
-                                    "message": "文件超过 30MB，请压缩或只提交正文部分"},
+                                    "message": f"文件 {size / 1024 / 1024:.1f}MB 超过 {limit}MB 上限；"
+                                               f"请删掉工程里的 PDF 成品与 build 目录后重新打包"},
                                    ensure_ascii=False))
     name = urllib.parse.quote(os.path.basename(p))
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0)) as c:
@@ -232,8 +230,25 @@ async def owl_upload(file_path: str) -> str:
     except Exception:
         data = {"raw": r.text[:500]}
     _raise_if_error(r, data)
+    return data
+
+
+@mcp.tool()
+async def owl_upload(file_path: str) -> str:
+    """上传本机文件到服务端，返回 file_id（检测 / 图像 / 排版必用）。
+
+    为什么需要：服务在云端，读不到你本机的 D:/… 路径。先上传拿 file_id，
+    再把它放进 owl_quote 的 check 参数（同时给 hanzi 汉字数才能出价）。
+    只传纯文本的可以用 content 直传，不必上传。
+
+    Args:
+        file_path: 本机文件的绝对路径（docx / doc / pdf / txt / png / jpg / tif / zip）。
+            zip 只用于论文排版工程包，上限 60MB；其它格式上限 30MB。
+    """
+    data = await _upload_local(file_path)
     return _dump({**data, "next": "把这个 file_id 放进 owl_quote 的 params.file_id，"
-                                  "同时给 hanzi（汉字数）才能出价"})
+                                  "同时给 hanzi（汉字数）才能出价；"
+                                  "排版请直接用 owl_typeset（本工具只是它的前置步骤）"})
 
 
 @mcp.tool()
@@ -400,6 +415,85 @@ async def owl_figure(mode: str, description: str, count: int = 1,
                   "tikz_code": res.get("tikz_code") or "",
                   "warnings": res.get("warnings") or [],
                   "error": final.get("error_msg")})
+
+
+@mcp.tool()
+async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: str = "",
+                      entry: str = "", pages: int = 0, hanzi: int = 0, title: str = "",
+                      file_id: str = "", template_file_id: str = "") -> str:
+    """按学校模板排版一篇论文，一次调用拿回 PDF（Word 模式另附样式化 Word + 体检单）。
+
+    **开工前必须先调 owl_meta 看 channels.typeset_ready。** 为 false 时不要调用本工具，
+    只如实告诉用户「排版功能还在灰度中」，并把 channels.typeset_detail 转成人话说，
+    不要报价、不要让用户先打包 —— 那是让人白忙一场。
+
+    Args:
+        mode:
+            docx  = 用户手里是 Word 稿（绝大多数人的情况）。需要同时给模板。
+            latex = 用户手里是 LaTeX 工程（Overleaf 下载的那种）。
+        file_path: 本机文件路径。docx 模式给草稿 .docx；latex 模式给工程包 .zip
+            （打包时把 .tex/.cls/.bib/图片/bib 一起放进去，不要带 build 目录与 PDF 成品）。
+            **工程可以放在文件夹里**（如 论文/main.tex），服务端会自动找主文件。
+        template_path: 学校模板 .docx（学校研究生院官网下载的那种），docx 模式必填。
+        entry: 仅 latex 模式：主文件名，如 "main.tex"。工程里只有一个 .tex 时可省略。
+        pages: 正文页数（报价分档用，latex 建议给）。
+        hanzi: 全文汉字数（docx 模式必给，用于分档与进度预估）。
+        title: 论文题目（会印在封面/页眉，不给则用文件里的）。
+        file_id / template_file_id: 已经用 owl_upload 传过的文件编号（与路径二选一）。
+
+    计费：按篇一口价（¥5.9–¥19.9 区间按页数分档），**报价即最终价**。
+    30 天内同一份稿（含同一模板）改格式重排只收 1 积分工本 —— 所以用户想改版式可以放心重排。
+    排版失败不收费。调用前请先把价格告诉用户并得到同意，不要默默扣费。
+
+    返回：pdf_url / docx_url（7 天有效直链，可直接下载）、checklist（格式体检单：
+    逐项「期望 vs 实测」，只有真测过的项才出现）、needs_confirm（模板里没看准的几项，
+    拿去问用户，**不要**把 profile 全部字段甩给用户）、doctor（系统替你改了什么）、
+    skipped（工程里被忽略的非排版文件，如 CI 配置/构建脚本，必须转告，否则用户会怀疑文件被改）。
+    """
+    mode = (mode or "latex").strip().lower()
+    if mode not in ("latex", "docx"):
+        return _dump({"error": "bad_params", "message": "mode 只能是 latex 或 docx"})
+
+    if not file_id:
+        if not file_path:
+            return _dump({"error": "bad_params",
+                          "message": "请给 file_path（本机文件）或 file_id（已上传）"})
+        file_id = (await _upload_local(file_path))["file_id"]
+    if mode == "docx" and not template_file_id:
+        if not template_path:
+            return _dump({"error": "bad_params",
+                          "message": "Word 模式需要学校模板：请给 template_path，"
+                                     "或先用 owl_upload 传模板拿 template_file_id"})
+        template_file_id = (await _upload_local(template_path))["file_id"]
+
+    # 先报价（免费）：把价格明确回给 Agent，由它转告用户
+    qparams = {"mode": mode}
+    if pages:
+        qparams["pages"] = int(pages)
+    if hanzi:
+        qparams["hanzi"] = int(hanzi)
+    quote = await _call("POST", "/v1/quote", {"action": "typeset", "params": qparams})
+    body = {"file_id": file_id, "mode": mode, "quote_id": (quote or {}).get("quote_id", "")}
+    if template_file_id:
+        body["template_file_id"] = template_file_id
+    if entry:
+        body["entry"] = entry
+    if title:
+        body["title"] = title
+
+    # 排版要真跑 LaTeX，实测 4–15 秒、大稿可到 1–2 分钟：超时必须放宽，不能沿用 120s
+    r = await _call("POST", "/v1/typeset", body, timeout=httpx.Timeout(330.0, connect=10.0))
+    out = dict(r or {})
+    for k, src in (("pdf_url", "pdf_path"), ("docx_url", "docx_path")):
+        p = out.pop(src, None)
+        out[k] = (PUBLIC_BASE + p) if p else None
+    out["est_points"] = (quote or {}).get("est_points")
+    out["points_charged"] = r.get("points_charged")
+    out["checklist_tip"] = ("逐项「期望 vs 实测」讲给用户；⚠ 项说清是哪一项不一致、"
+                            "要不要改。只讲返回里出现的项，没有的项不要编。")
+    out["files_tip"] = ("pdf_url / docx_url 自带 7 天签名，可直接下载；"
+                        "建议存到用户论文目录 05-排版/ 下，文件名用「题目-排版-v1.pdf」")
+    return _dump(out)
 
 
 @mcp.tool()
