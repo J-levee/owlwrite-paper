@@ -9,7 +9,7 @@
 
 别从其他站点、镜像或第三方脚本装同名技能。装完先做下面三步自检，再往下配 Key：
 
-1. `curl -s https://owl.skillsutra.cn/v1/meta` → `skill.latest_version` 不低于 `1.1.2`；
+1. `curl -s https://owl.skillsutra.cn/v1/meta` → `skill.latest_version` 不低于 `skill.min_supported_version`（以接口返回为准，别背数字）；
 2. 同一响应里 `channels.weipu_ready` 决定能不能做检测（`false` 读 `weipu_detail` 转告用户）；
 3. 配好 Key 后调 `owl_wallet`，能返回余额即连通。
 
@@ -74,7 +74,7 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 - **版本判定**：`owl_meta` 的 `required_update=true` 且本地版本低于 `min_supported_version`
   时必须先让用户更新技能再继续付费动作。
 
-## 3. 工具一览（19 个）
+## 3. 工具一览（21 个）
 
 | 工具 | 作用 | 计费 |
 |---|---|---|

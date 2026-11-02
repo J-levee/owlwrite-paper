@@ -436,7 +436,9 @@ async def owl_figure(mode: str, description: str, count: int = 1,
 @mcp.tool()
 async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: str = "",
                       entry: str = "", pages: int = 0, hanzi: int = 0, title: str = "",
-                      file_id: str = "", template_file_id: str = "") -> str:
+                      file_id: str = "", template_file_id: str = "",
+                      author: str = "", student_id: str = "", college: str = "",
+                      major: str = "", advisor: str = "", date: str = "") -> str:
     """按学校模板排版一篇论文，一次调用拿回 PDF（Word 模式另附样式化 Word + 体检单）。
 
     **开工前必须先调 owl_meta 看 channels.typeset_ready。** 为 false 时不要调用本工具，
@@ -452,19 +454,25 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
             **工程可以放在文件夹里**（如 论文/main.tex），服务端会自动找主文件。
         template_path: 学校模板 .docx（学校研究生院官网下载的那种），docx 模式必填。
         entry: 仅 latex 模式：主文件名，如 "main.tex"。工程里只有一个 .tex 时可省略。
-        pages: 正文页数（latex 必给；docx 给了也以网关从正文数出的为准）。
+        pages: 整本 PDF 的页数（latex 必给：填你本地编出来的 PDF 总页数，含封面/目录/附录；
+               docx 给了也以网关从正文数出的为准）。
         hanzi: 全文汉字数（docx 可不给：本工具会直接从 .docx 正文里数）。
-        title: 论文题目（会印在封面/页眉，不给则用文件里的）。
+        title: 论文题目（会印在封面，不给则用文件里的）。
+        author / student_id / college / major / advisor / date: 封面信息（仅 docx，可选）。
+              不问也能出稿，但学位论文封面要这些字段，能问就顺口问一次。
         file_id / template_file_id: 已经用 owl_upload 传过的文件编号（与路径二选一）。
 
     计费：按篇一口价，按页数分档，**具体积分一律以 owl_quote 实时返回的 est_points 为准**
-    （本工具不写死任何价格数字，你也不要凭印象报价）。报价即最终价，之后不会补收。
-    72 小时内同一份稿（含同一模板）改格式重排只收 1 积分工本 —— 所以用户想改版式可以放心重排。
+    （本工具不写死任何价格数字，你也不要凭印象报价）。
+    报价即最终价，不会事后补扣：如果实排页数超出申报档位，网关会**拒单并让你重新报价，
+    本次不扣费**——所以页数请如实填。
+    72 小时内同一篇稿（标题相同、含同一模板）改格式重排只收 1 积分工本，改多少次都算同一篇。
     排版失败不收费。调用前请先把价格告诉用户并得到同意，不要默默扣费。
 
     返回：pdf_url / docx_url（7 天有效直链，可直接下载）、checklist（格式体检单：
-    逐项「期望 vs 实测」，只有真测过的项才出现）、needs_confirm（模板里没看准的几项，
-    拿去问用户，**不要**把 profile 全部字段甩给用户）、doctor（系统替你改了什么）、
+    逐项「期望 vs 实测」，只有真测过的项才出现；状态「—」= 本稿测不了，不是不合格）、
+    needs_confirm（模板里没看准的几项，拿去问用户，**不要**把 profile 全部字段甩给用户）、
+    content_gaps（**内容没搬过去的部分，非空必须转告**）、doctor（系统替你改了什么）、
     skipped（工程里被忽略的非排版文件，如 CI 配置/构建脚本，必须转告，否则用户会怀疑文件被改）。
     """
     mode = (mode or "latex").strip().lower()
@@ -523,9 +531,20 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
         body["entry"] = entry
     if title:
         body["title"] = title
+    # 封面字段（仅 docx）：学位论文封面是格式审查第一关，问一次比让用户事后补划算
+    for k, v in (("author", author), ("student_id", student_id), ("college", college),
+                 ("major", major), ("advisor", advisor), ("date", date)):
+        if v:
+            body[k] = v
 
     # 排版要真跑 LaTeX，实测 4–15 秒、大稿可到 1–2 分钟：超时必须放宽，不能沿用 120s
-    r = await _call("POST", "/v1/typeset", body, timeout=httpx.Timeout(330.0, connect=10.0))
+    try:
+        r = await _call("POST", "/v1/typeset", body, timeout=httpx.Timeout(330.0, connect=10.0))
+    except Exception as exc:  # noqa: BLE001 — 超时要给人话，不能把 httpx 异常抛给用户
+        return _dump({"error": "timeout",
+                      "message": "这次排版没有在预期时间内完成，可能是一次性的引擎卡住（不代表你的稿有问题）。"
+                                 "可以原样重试一次；本次未扣费。",
+                      "detail": str(exc)[:200]})
     out = dict(r or {})
     for k, src in (("pdf_url", "pdf_path"), ("docx_url", "docx_path")):
         p = out.pop(src, None)
@@ -533,9 +552,14 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
     out["est_points"] = (quote or {}).get("est_points")
     out["points_charged"] = r.get("points_charged")
     out["checklist_tip"] = ("逐项「期望 vs 实测」讲给用户；⚠ 项说清是哪一项不一致、"
-                            "要不要改。只讲返回里出现的项，没有的项不要编。")
+                            "要不要改。状态为「—」的是本稿测不了的项，不要念成不合格。"
+                            "只讲返回里出现的项，没有的项不要编。")
+    gaps = out.get("content_gaps") or []
+    out["content_gaps_tip"] = ("这条非空就必须原样转告用户（公式/脚注/图/表列数没搬过去），"
+                               "不要说成「已全部排好」。用户据此决定要不要先补稿。"
+                               if gaps else None)
     out["files_tip"] = ("pdf_url / docx_url 自带 7 天签名，可直接下载；"
-                        "建议存到用户论文目录 05-排版/ 下，文件名用「题目-排版-v1.pdf」")
+                        "建议存到用户论文目录 06-交付/ 下，文件名用「题目-排版-v1.pdf」")
     return _dump(out)
 
 
@@ -661,6 +685,45 @@ async def owl_campaign(code: str = "") -> str:
     if code and code.strip():
         return _dump(await _call("POST", "/v1/campaign/redeem", {"code": code.strip()}))
     return _dump(await _call("GET", "/v1/campaigns"))
+
+
+@mcp.tool()
+async def owl_claim_favorite(image_path: str) -> str:
+    """提交 SkillHub 收藏截图，领取「收藏赠积分」活动的积分（免费，每人限 1 次）。
+
+    什么时候用：用户自己提起「我收藏了 / 截图给你 / 收藏活动怎么领」，或 owl_campaign
+    返回 favorite.campaign_active=true 且 participated=false 时。**不要主动推销活动**。
+
+    截图三要求（缺一即不通过，先跟用户讲清再提交）：
+      ① 能看到技能 id（形如 @user_xxx/owlwrite-paper，网址栏或页面信息都行）；
+      ② 必须是已收藏状态（亮星 + 按钮显示「取消收藏」）；
+      ③ 不要用官方样例图（带水印会被拒）。
+
+    拒单不占参与次数，按提示换新截图重交即可；每人限 1 次；到账积分 90 天有效。
+
+    Args:
+        image_path: 截图在本机的绝对路径（png / jpg / webp，≤5MB）。
+    """
+    import base64
+    p = os.path.expanduser((image_path or "").strip().strip('"').strip("'"))
+    if not p or not os.path.isfile(p):
+        raise ToolError(json.dumps({"error": "file_not_found",
+                                    "message": f"截图文件不存在：{p or '(空路径)'}"},
+                                   ensure_ascii=False))
+    with open(p, "rb") as f:
+        raw = f.read()
+    if len(raw) > 5 * 1024 * 1024:
+        raise ToolError(json.dumps({"error": "image_too_large",
+                                    "message": "截图超过 5MB，请压缩后重试"},
+                                   ensure_ascii=False))
+    if len(raw) < 1024:
+        raise ToolError(json.dumps({"error": "bad_image",
+                                    "message": "截图太小（不足 1KB），请上传完整页面截图"},
+                                   ensure_ascii=False))
+    data = await _call("POST", "/v1/campaign/favorite-claim",
+                       {"image_base64": base64.b64encode(raw).decode()}, timeout=180)
+    return _dump({**data, "next": "把 points 与「90 天有效」如实告诉用户；若 ok 为 false，"
+                                  "按 error 说明让用户换新截图重交（不占参与次数）"})
 
 
 if __name__ == "__main__":
