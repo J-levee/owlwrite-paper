@@ -4,7 +4,7 @@ slug: owlwrite-paper
 displayName: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name_en: OwlWrite Paper Workbench
-version: 1.1.9
+version: 1.2.0
 description: "论文全流程工作台（夜猫子）：背靠全球 12 亿级文献资源（8000 万篇授权中文期刊，检索命中可取授权全文 PDF；外文 OA 文献免费取全文）与维普官方检测服务。文献检索、引文追溯、论文写作、科研配图（TikZ 矢量示意图 / 数据图表 / AI 科研配图）、**按学校模板排版出 PDF**、查重、AIGC 检测、格式检测、斟知智评评级、数据与图像可信度检测、参考文献质量检测、斟校对、引文核验与撤稿把关、余额与充值。当用户说「写论文 / 找文献 / 查文献 / 下论文 / 查这篇引用了谁 / 画流程图 / 画技术路线图 / 画示意图 / 画数据图表 / 论文配图 / 机制图 / 按学校模板排版 / 论文排版 / 格式调成学校要求 / 导出可提交的 PDF / 查重 / 测 AI 生成风险 / 查论文格式 / 论文评级 / 图有没有造假 / 参考文献对不对 / 引用有没有被撤稿 / 还剩多少点」时使用。需要已配置 OwlWrite MCP（owlwrite）。"
 description_zh: "论文全流程工作台：找文献、写初稿、按学校模板排版导出可提交的 PDF、跑查重与 AIGC 检测、核验引文，全程在对话里完成，产物自动落到本机。"
 description_en: "End-to-end paper workbench: literature search, drafting, school-template typesetting to a submission-ready PDF, similarity and AI-content checks, citation verification — all inside the chat."
@@ -307,14 +307,23 @@ recommends:
 1. **先报价、先说价、得到同意再执行**：`owl_quote`（`action: "typeset"`，
    params：`mode`=`latex`/`docx`、`pages` 或 `hanzi`）→ 把 `est_points` 折成钱告诉用户
    （1 积分 = 0.01 元），并说清「按篇一口价；72 小时内改格式重排只收 1 积分工本」。
-2. `owl_typeset(file_path, mode, template_path?, entry?, pages/hanzi, title)`
+2. `owl_typeset(file_path, mode, template_path?, entry?, pages/hanzi, title, blind?, refs_std?)`
    —— **把本机文件路径直接给它**，上传由工具内部完成（服务读不到 `D:/…`，但你不必自己先传）。
    已经用 `owl_upload` 传过的，也可以改成传 `file_id` / `template_file_id`。
    `mode=docx` 必须同时给 `template_path`（学校研究生院官网下的那种 docx）。
+   两个开关（**仅 `mode=docx` 生效**，LaTeX 工程传了会被拒）：
+   - `blind=true`：盲审版。用户说「盲审」「送盲审」「匿名评审」时必须开——封面作者/学号/
+     导师脱敏为 ***、致谢整节隐藏。盲审版定稿后要提醒：正式提交版关掉 `blind` 重排一次
+     （72 小时内同一篇稿只收 1 积分工本）。
+   - `refs_std`：参考文献著录标准，`"2015"`（默认）或 `"2025"`（GB/T 7714—2025，
+     2026-07-01 起实施）。学校/期刊明确要求 2025 版时选 `2025`；不确定就默认。
 3. 返回里直接就有结果：`pdf_url`（`mode=docx` 还有 `docx_url`）、`checklist`（体检单）、
    `needs_confirm`（模板里没看准的少数几项）、`content_gaps`（**内容没搬过去的部分**）、
    `doctor.fixes`（自动修过什么）、`skipped`（忽略了哪些构建脚本）、`points_charged`（实扣）。
    `mode=docx` 还可以顺口问一次封面信息（作者/学号/学院/专业/导师/日期），一次问完，别追问。
+   **`font_notice` 是交付必讲项**：PDF 用开源等效字体、Word 按模板原始字体名，
+   用 `font_notice_tip` 里的原文原样转告，不要说「PDF 里就是宋体」；
+   用户要字体绝对准确 → 让他下载 Word 自己「另存为 PDF」。
 4. **把体检单讲成人话**，两种模式口径不同，不许混淆：
    - `mode=docx`（按学校模板排）：逐项比对「模板要求 vs PDF 实测」——纸张、页边距、
      正文字体、字号、首行缩进、标题字号、内容越界。状态 **`—`** 表示这一项在本稿里测不了

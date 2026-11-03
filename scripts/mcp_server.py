@@ -438,7 +438,8 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
                       entry: str = "", pages: int = 0, hanzi: int = 0, title: str = "",
                       file_id: str = "", template_file_id: str = "",
                       author: str = "", student_id: str = "", college: str = "",
-                      major: str = "", advisor: str = "", date: str = "") -> str:
+                      major: str = "", advisor: str = "", date: str = "",
+                      blind: bool = False, refs_std: str = "2015") -> str:
     """按学校模板排版一篇论文，一次调用拿回 PDF（Word 模式另附样式化 Word + 体检单）。
 
     **开工前必须先调 owl_meta 看 channels.typeset_ready。** 为 false 时不要调用本工具，
@@ -460,6 +461,13 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
         title: 论文题目（会印在封面，不给则用文件里的）。
         author / student_id / college / major / advisor / date: 封面信息（仅 docx，可选）。
               不问也能出稿，但学位论文封面要这些字段，能问就顺口问一次。
+        blind: 盲审版（仅 docx 模式，默认 false）。true 时封面作者/学号/导师脱敏为 ***、
+              致谢整节隐藏。**用户说「盲审」「送盲审」「匿名评审」时必须开**；
+              LaTeX 模式不适用（传了会被拒）。
+        refs_std: 参考文献著录标准（仅 docx 模式）："2015"（默认）或 "2025"
+              （GB/T 7714—2025，2026-07-01 起实施）。用户学校明确要求 2025 版、
+              或稿子要投 2026 年之后的期刊/送审时选 2025；不确定就用默认 2015。
+              LaTeX 模式不适用（工程自带样式，传了会被拒）。
         file_id / template_file_id: 已经用 owl_upload 传过的文件编号（与路径二选一）。
 
     计费：按篇一口价，按页数分档，**具体积分一律以 owl_quote 实时返回的 est_points 为准**
@@ -536,6 +544,13 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
                  ("major", major), ("advisor", advisor), ("date", date)):
         if v:
             body[k] = v
+    # 盲审版 / 参考文献标准（仅 docx）：口径校验在网关入口，这里只透传；
+    # latex 模式传了会被 422 拒，所以按模式决定是否携带，不让 Agent 踩坑
+    if mode == "docx":
+        if blind:
+            body["blind"] = True
+        if refs_std and refs_std != "2015":
+            body["refs_std"] = refs_std
 
     # 排版要真跑 LaTeX，实测 4–15 秒、大稿可到 1–2 分钟：超时必须放宽，不能沿用 120s
     try:
@@ -558,6 +573,14 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
     out["content_gaps_tip"] = ("这条非空就必须原样转告用户（公式/脚注/图/表列数没搬过去），"
                                "不要说成「已全部排好」。用户据此决定要不要先补稿。"
                                if gaps else None)
+    if out.get("font_notice"):
+        out["font_notice_tip"] = ("这条必须原样转告用户：PDF 与 Word 用的不是同一套字体。"
+                                  "用 font_notice.text（长版）或 .short（短版）的原文讲，"
+                                  "不要改写口径，也不要说「PDF 里就是宋体」。")
+    if out.get("blind"):
+        out["blind_tip"] = ("本次是盲审版：封面作者/学号/导师已脱敏为 ***、致谢整节已隐藏。"
+                            "交付时必须说清这两点，并提醒用户：正式提交版要关掉 blind 重排一次"
+                            "（72 小时内同一篇稿只收 1 积分工本）。")
     out["files_tip"] = ("pdf_url / docx_url 自带 7 天签名，可直接下载；"
                         "建议存到用户论文目录 06-交付/ 下，文件名用「题目-排版-v1.pdf」")
     return _dump(out)
