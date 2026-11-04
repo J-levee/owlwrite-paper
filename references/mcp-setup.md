@@ -147,7 +147,7 @@ env = { OWL_BASE = "https://owl.skillsutra.cn", OWL_API_KEY = "owl_sk_你的key"
 | `owl_disciplines` | 斟知智评学科码表（class_id 用，逐级筛给用户选） | 免费 |
 | `owl_campaign` | 活动券码兑换 / 我的邀请码与战绩 | 免费 |
 | `owl_upload` | 上传本机文件换 `file_id`（检测 / 图像 / 格式检测必用；≤30MB） | 免费 |
-| `owl_quote` | 写作 / 检测 / 核验报价（返回预估区间；检测需给 `hanzi`） | 免费（不扣积分） |
+| `owl_quote` | 写作 / 检测 / 核验 / 排版报价（返回预估区间；检测需给 `hanzi`） | 免费（不扣积分） |
 | `owl_run` | 执行已报价任务 | 写作/检测按**实际量**结算（无冻结、无封顶），其余按报价 |
 | `owl_run_status` | 轮询任务状态（含 `pending_upstream`＝报告仍在生成，不是失败） | 免费 |
 | `owl_run_report` | 核验逐条判定；检测报告四份（`part=main` 综合 / `compare` 逐句比对 / `simple` 简洁 PDF / `fulltext` 原文对照 PDF） | 免费 |
@@ -155,6 +155,8 @@ env = { OWL_BASE = "https://owl.skillsutra.cn", OWL_API_KEY = "owl_sk_你的key"
 | `owl_wallet` | 查余额（含 30 天内到期积分、赠送积分余额） | 免费 |
 | `owl_recharge` | 发起充值（10/30/50/100/500 元） | 免费 |
 | `owl_recharge_status` | 查充值单 / 核实到账 | 免费 |
+| `owl_typeset` | 论文排版（LaTeX 工程 / Word 按学校模板 → 可提交 PDF + 同版式 Word + 格式体检单；支持盲审版与 GB/T 7714 双标准；72 小时内同稿重排只收工本） | 实拉（一篇一价） |
+| `owl_claim_favorite` | 收藏活动领积分（在技能市场收藏本技能后提交截图） | 免费 |
 
 1 积分 = 0.01 元；充值购买积分有效期 1 年，活动/赠送积分有效期 90 天，均先到期先扣；
 全平台缓存命中统一 1 积分，**缓存窗口统一 72 小时**。

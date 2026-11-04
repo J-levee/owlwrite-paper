@@ -47,15 +47,15 @@ OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # ⚠️ 发布前必须与 SKILL.md 的 version / connector-meta.version / meta.json latest_version
 #    四处对齐（preflight A30 守门），否则装的是最新版也会被自己判成旧版——每次开工都
 #    提示「有新版本」，而更新完还是同一句（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.2.1"
+OWL_SKILL_VERSION = "1.2.2"
 
 mcp = MCPServer(
     "owlwrite",
     instructions=(
         "OwlWrite（夜猫子论文写作）：文献检索、论文写作、查重、引文核验一站式服务。"
-        "典型工作流：1) owl_search 检索文献；2) owl_quote 对写作/查重/核验报价；"
+        "典型工作流：1) owl_search 检索文献；2) owl_quote 对写作/查重/核验/排版报价；"
         "3) 把报价告诉用户；4) owl_run 执行；5) owl_run_status 轮询到结束。"
-        "所有工具返回 JSON；points_charged 是本次消耗的点数（1 点=0.01 元）。"
+        "所有工具返回 JSON；points_charged 是本次消耗的积分（1 积分=0.01 元）。"
         "任何工具返回里出现 _notice_tip 时，必须按它的要求把活动/公告转告用户。"
     ),
 )
@@ -226,7 +226,7 @@ async def owl_disciplines() -> str:
 
 @mcp.tool()
 async def owl_quote(action: str, params: dict) -> str:
-    """对写作/查重/核验报价（不扣费）。返回 quote_id，供 owl_run 使用。
+    """对写作/查重/核验/排版报价（不扣费）。返回 quote_id，供 owl_run 使用。
 
     Args:
         action: "write" | "check" | "verify"
@@ -237,6 +237,7 @@ async def owl_quote(action: str, params: dict) -> str:
                     图像 / 格式检测必须给 file_id（先 owl_upload 上传本机文件）。
                     product 先调 owl_products 获取，去掉 `wp.` 前缀只留裸编码。
           - verify: params = {"refs_text": 参考文献编号列表文本(GB/T 7714), "lang": zh|en|auto}
+          - typeset: 排版报价（mode: latex|docx + 页数等，跟 owl_typeset 流程走，一般直接用 owl_typeset 不必手拼）
         params: 上述参数字典。
 
     礼仪（技能文档强制）：拿到报价先告知用户价格，经同意再 owl_run。不要默默扣费。
@@ -632,7 +633,7 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
 
 @mcp.tool()
 async def owl_wallet() -> str:
-    """查询当前账号点数余额（balance_total / balance_avail，1 点 = 0.01 元）。
+    """查询当前账号积分余额（balance_total / balance_avail，1 积分 = 0.01 元）。
 
     余额不足以执行下一步时，提示用户去充值，不要重试。
     """
