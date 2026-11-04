@@ -1,6 +1,17 @@
 # owlwrite MCP 接入说明（给 Agent 终端用户）
 
-## 0. 装技能（只有两个官方入口）
+## 0. 接入方式怎么选（三种，按省事程度排）
+
+| 方式 | 适合谁 | 前提 |
+|---|---|---|
+| ① 技能包（推荐） | WorkBuddy、SkillHub / ClawHub 生态的 Agent | 平台内一键安装，无需任何配置 |
+| ② 平台官方 MCP 连接器 | 平台已上架的（陆续接入中，以平台内搜到为准） | 没上架的平台用方式 ③ |
+| ③ 自助 MCP 配置（本文） | 任何支持自定义 MCP 的 Agent：Claude Desktop / Claude Code / Cursor / Cline / Codex CLI 等 | 只要：注册拿 Key + 本机 Python ≥ 3.11 + 改一份配置文件 |
+
+> 只支持**远程 MCP**（HTTP 地址直连）的 Agent（如千问办公网页版、扣子等）：需要服务端开放远程端点，
+> 目前尚未开放。可先用方式 ①（若该平台支持装技能）或网页版个人中心（充值、检测、下载报告）。
+
+## 0.1 装技能（只有两个官方入口）
 
 | 渠道 | 地址 |
 |---|---|
@@ -35,7 +46,7 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 
 ## 2. MCP 客户端配置
 
-### WorkBuddy / Claude Desktop（claude_desktop_config.json）
+### Claude Desktop / WorkBuddy（claude_desktop_config.json）
 
 ```json
 {
@@ -52,16 +63,63 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 }
 ```
 
+### Cursor（~/.cursor/mcp.json 或项目 .cursor/mcp.json）
+
+```json
+{ "mcpServers": { "owlwrite": {
+  "command": "python",
+  "args": ["<技能目录>/owlwrite-paper/scripts/mcp_server.py"],
+  "env": { "OWL_BASE": "https://owl.skillsutra.cn", "OWL_API_KEY": "owl_sk_你的key" }
+}}}
+```
+
+### Claude Code（命令行一条搞定）
+
+```bash
+claude mcp add owlwrite \
+  --env OWL_BASE=https://owl.skillsutra.cn \
+  --env OWL_API_KEY=owl_sk_你的key \
+  -- python <技能目录>/owlwrite-paper/scripts/mcp_server.py
+```
+
+### Cline / 其他 VS Code 类插件
+
+设置界面的 MCP JSON 与 Claude Desktop 结构完全相同（`mcpServers.owlwrite`，command/args/env 三件套）。
+
+### Codex CLI（~/.codex/config.toml）
+
+```toml
+[mcp_servers.owlwrite]
+command = "python"
+args = ["<技能目录>/owlwrite-paper/scripts/mcp_server.py"]
+env = { OWL_BASE = "https://owl.skillsutra.cn", OWL_API_KEY = "owl_sk_你的key" }
+```
+
+> 只支持远程 MCP 的平台（千问办公、扣子等）：暂未开放远程端点；平台若有技能/插件市场
+> 可搜「owlwrite」安装（方式 ①），或用网页版个人中心完成充值、检测与报告下载。
+
 - `<技能目录>` 换成你本机技能包实际路径（`scripts/mcp_server.py` 就在技能包里，无需另下文件）。
+  Windows 路径用双反斜杠 `C:\\...` 或正斜杠；`python` 不存在时换成 `python3` 或完整安装路径。
 - `OWL_BASE` 固定填 **`https://owl.skillsutra.cn`**（接口地址）。官网是 `paper.skillsutra.cn`，
   两者不同域，填错会连不上。
-- Python ≥ 3.11，需 `pip install mcp httpx`。
+- Python ≥ 3.11，需 `pip install mcp httpx`（装在与配置里同一个 Python 里）。
 - **上传大文件把客户端超时放宽**：`owl_upload` 传 30MB 论文在上行慢的网络可能超过 30 秒，
   远程接入时把 `timeout` 设到 `120000`（毫秒），否则会在本地先超时而服务端其实已收下。
 
 ### 配好后验证与冷启动注意
 
-对话里说「查一下肠道菌群和代谢的文献」，能返回带 DOI 的文献列表即接入成功。
+对话里说「查一下肠道菌群和代谢的文献」，能返回带 DOI 的文献列表即接入成功；
+再说「看看我的余额」（owl_wallet，免费）可确认计费链路。
+
+### 常见问题
+
+| 现象 | 原因与处理 |
+|---|---|
+| 提示「未配置 OWL_API_KEY」 | env 里没写，或 Key 前后有空格/中文引号；重新复制粘贴 |
+| 工具列表为空 / 连接失败 | 检查 Python 路径与 mcp_server.py 路径；确认 `pip install mcp httpx` 装在同一个 Python |
+| 调用报 401 | Key 被吊销或填错；个人中心重建 Key 后改配置 |
+| 上传 30MB 论文超时 | 客户端 MCP 超时调到 120000 毫秒，服务端其实已收下 |
+| 检测类报不可用 | 调 owl_meta 看 `channels.weipu_detail`，转告用户即可，不是配置问题 |
 
 - **冷启动陷阱**：MCP 客户端启动后第一次调工具可能报连接错误——是客户端在拉起本地进程，
   等几秒重试即可，不要改配置重装；连续失败才检查 `OWL_BASE`（服务端是 owl.skillsutra.cn，
@@ -108,3 +166,8 @@ curl -s -X POST https://owl.skillsutra.cn/v1/auth/register \
 - 个人中心 https://paper.skillsutra.cn/account.html：余额与流水、任务记录、报告与全文下载、API Key 管理与吊销。
 - 报告验真：维普 https://vpcs.fanyu.com/systemVerify 、斟知 https://www.zhenzhi.com/verify 。
 - 发票 / 企业采购 / 多账号 / API 对接：**vipsmart@vipslib.com**。
+
+## 5. 安全须知
+
+API Key 等同钱包钥匙：不要发到群里、不要贴给他人或截图外传，只出现在你自己设备的配置文件里；
+怀疑泄露就到个人中心「API Key 管理」吊销重建（余额不受影响）。

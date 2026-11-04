@@ -47,7 +47,7 @@ OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # ⚠️ 发布前必须与 SKILL.md 的 version / connector-meta.version / meta.json latest_version
 #    四处对齐（preflight A30 守门），否则装的是最新版也会被自己判成旧版——每次开工都
 #    提示「有新版本」，而更新完还是同一句（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.1.9"
+OWL_SKILL_VERSION = "1.2.1"
 
 mcp = MCPServer(
     "owlwrite",
@@ -56,6 +56,7 @@ mcp = MCPServer(
         "典型工作流：1) owl_search 检索文献；2) owl_quote 对写作/查重/核验报价；"
         "3) 把报价告诉用户；4) owl_run 执行；5) owl_run_status 轮询到结束。"
         "所有工具返回 JSON；points_charged 是本次消耗的点数（1 点=0.01 元）。"
+        "任何工具返回里出现 _notice_tip 时，必须按它的要求把活动/公告转告用户。"
     ),
 )
 
@@ -94,6 +95,48 @@ async def _call(method: str, path: str, body: dict | None = None, params: dict |
     # 错误结构化透传，不包装不吞——Agent 按 code 分支处理；
     # ToolError → 客户端收到 is_error=True + JSON 消息，无 traceback 污染流
     _raise_if_error(r, data)
+    # 活动/公告透传（2026-11-04）：网关把当前活动挂在响应顶层 owl_notice，
+    # 这里补 _notice_tip 让 Agent 一定转告用户，不依赖它有没有先调 owl_meta。
+    return _notices_tip(data)
+
+
+_NOTICE_SEEN_PATH = os.path.expanduser("~/.owl_notice_seen.json")
+
+
+def _notices_tip(data):
+    """把网关挂在响应里的活动公告（owl_notice）转成给 Agent 的硬提示。
+
+    网关从 2026-11-04 起在 /v1/* 响应顶层带 owl_notice；这里再补一步：
+    未看过的公告 → 附 `_notice_tip` 明确要求转告用户，并记下 id 避免每次调用都重复。
+    **写不了本地文件也照常提示**——宁可重复，不可漏发（这正是本功能的初衷）。
+    """
+    try:
+        if not isinstance(data, dict):
+            return data
+        items = data.get("owl_notice")
+        if not items:
+            return data
+        seen: set = set()
+        try:
+            with open(_NOTICE_SEEN_PATH, encoding="utf-8") as f:
+                seen = set(json.load(f) or [])
+        except Exception:
+            seen = set()
+        fresh = [n for n in items
+                 if isinstance(n, dict) and n.get("id") and n["id"] not in seen]
+        if not fresh:
+            return data
+        texts = "；".join(str(n.get("text") or "").strip() for n in fresh)
+        data["_notice_tip"] = (
+            "【请转告用户】" + texts +
+            "。把这件事用一两句话顺口告诉用户即可，不要打断正在进行的任务，也不要替他做选择。")
+        try:
+            with open(_NOTICE_SEEN_PATH, "w", encoding="utf-8") as f:
+                json.dump(sorted(seen | {n["id"] for n in fresh}), f)
+        except Exception:
+            pass
+    except Exception:  # noqa: BLE001 — 公告透传绝不影响主流程
+        pass
     return data
 
 
@@ -157,7 +200,8 @@ async def owl_meta() -> str:
        并把 required_reason 原话说给用户听；
     2) 仅 latest_version 更高 → 一句话提示可更新，**不阻塞**本次任务；
     3) 版本一致 → 静默，不打扰用户。
-    notices 里有新公告时按相关度转告。
+    notices 里有新公告时按相关度转告。活动类公告同时会随任意工具返回的
+    owl_notice / _notice_tip 送达，看到就转告，不必等本工具。
 
     检测类任务开工前看 channels.weipu_ready：它是检测服务的**真实连通性**检查结果（不是「凭据填没填」）。
     为 false 时读同级 channels.weipu_detail（一句人话）转告用户，别把 weipu_state 的内部码念给他；
@@ -582,7 +626,7 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
                             "交付时必须说清这两点，并提醒用户：正式提交版要关掉 blind 重排一次"
                             "（72 小时内同一篇稿只收 1 积分工本）。")
     out["files_tip"] = ("pdf_url / docx_url 自带 7 天签名，可直接下载；"
-                        "建议存到用户论文目录 06-交付/ 下，文件名用「题目-排版-v1.pdf」")
+                        "建议存到用户论文目录 07-交付/ 下，文件名用「题目-排版-v1.pdf」")
     return _dump(out)
 
 
