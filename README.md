@@ -2,7 +2,7 @@
 
 > 面向 AI Agent 的论文全流程技能包：**找文献 → 写初稿 → 跑检测 → 核引文**，全程在对话里完成，产物落到用户自己的电脑。
 
-- 版本：**1.2.3**（赠送积分可用范围与注册加赠规则写明；写作累计上限 2000、检测类需充值积分）
+- 版本：**1.3.0**（**装好即用：不配置 MCP 也能直接跑**；MCP 接入方式保留为可选）
 - 官网与实时价目：https://paper.skillsutra.cn （价目页 `/price`，一切报价以接口实时返回为准）
 - 服务端点：https://owl.skillsutra.cn （MCP / HTTP 接口）
 
@@ -21,6 +21,8 @@
 2. 同一响应的 `channels.weipu_ready` 为 `true` 才做检测类任务，为 `false` 时读 `channels.weipu_detail` 如实告知用户；
 3. 调 `owl_wallet` 能返回余额 → API Key 与服务端连通；
 4. `owl_*` 工具共 21 个（含 `owl_upload` 换 `file_id`、`owl_typeset` 排版出稿、`owl_claim_favorite` 领活动积分）。
+
+**不配 MCP 的最小自检链路（命令行模式）**：`python scripts/owl.py init`（保存 key）→ `python scripts/owl.py doctor`（无 key 也能测连通性、查版本更新）→ `python scripts/owl.py search "检索词"`（跑一次真实检索）。三步详见 [`references/quickstart.md`](references/quickstart.md)。
 
 ### 手动装（离线 / 自建宿主）
 
@@ -41,7 +43,7 @@
 
 3. API Key 在 https://paper.skillsutra.cn 注册后获取（只显示一次）。
 
-详细步骤见 [`references/mcp-setup.md`](references/mcp-setup.md)，商品与能力边界见 [`references/product-matrix.md`](references/product-matrix.md) 与 [`references/coverage.md`](references/coverage.md)。
+详细步骤见 [`references/mcp-setup.md`](references/mcp-setup.md)、命令行模式上手见 [`references/quickstart.md`](references/quickstart.md)，商品与能力边界见 [`references/product-matrix.md`](references/product-matrix.md) 与 [`references/coverage.md`](references/coverage.md)。
 
 ## 能力
 
@@ -56,6 +58,8 @@
 | 账户 | `owl_wallet` `owl_recharge` `owl_recharge_status` `owl_campaign` `owl_claim_favorite` `owl_meta` `owl_disciplines` | 余额、充值、券码、收藏积分领取、版本公告与检测服务状态、学科码表 |
 
 共 **21 个 MCP 工具**。
+
+> 以上能力在命令行模式同样可用（`owl.py` 对应子命令，对照关系见 [`references/quickstart.md`](references/quickstart.md)）。
 
 ## 计费原则
 

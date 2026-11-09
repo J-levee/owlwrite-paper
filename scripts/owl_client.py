@@ -2,18 +2,21 @@
 # -*- coding: utf-8 -*-
 """OwlWrite 官方 HTTP 封装（2026-10-29）。
 
+兼容保留脚本；新用法请优先使用 owl.py（命令行）或 MCP 工具。
+
 解决 Agent 直连服务端的三类高频坑：
   1) 忘带/错写 Content-Type → 服务端 422；本脚本对 POST/PUT 自动 application/json
   2) Bearer key 散落在对话/命令行里 → 统一从环境变量 OWL_API_KEY 或 ~/.owl_creds.json 读取
   3) 响应体散在终端里难复核 → --out 把原始 JSON 落盘，供技能包归档
 
 用法：
-  python owl_client.py request GET /v1/wallet
+  python owl_client.py request GET /v1/me/wallet
   python owl_client.py request POST /v1/quote --data '{"action":"write","params":{...}}' --out quote.json
   python owl_client.py claim-favorite D:/截图/收藏.png
 
 凭据解析顺序：--key 参数 > 环境变量 OWL_API_KEY > ~/.owl_creds.json 的 owl_api_key 字段。
-key 属敏感信息：不要写进对话、不要写进 SKILL 输出，只在本脚本进程内使用。
+key 属敏感信息：优先让用户在注册页复制后通过 owl.py init 保存；用户把 key 粘进对话时，
+助手应立即执行 init 落盘并提醒用户可删除对话中的 key。不要把 key 写进任何输出文件或日志。
 """
 import argparse
 import base64

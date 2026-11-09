@@ -4,8 +4,8 @@ slug: owlwrite-paper
 displayName: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name_en: OwlWrite Paper Workbench
-version: 1.2.3
-description: "论文全流程工作台（夜猫子）：背靠全球 12 亿级文献资源（8000 万篇授权中文期刊，检索命中可取授权全文 PDF；外文 OA 文献免费取全文）与维普官方检测服务。文献检索、引文追溯、论文写作、科研配图（TikZ 矢量示意图 / 数据图表 / AI 科研配图）、按学校模板排版出 PDF、查重、AIGC 检测、格式检测、斟知智评评级、数据与图像可信度检测、参考文献质量检测、斟校对、引文核验与撤稿把关、余额与充值。当用户说「写论文 / 找文献 / 查文献 / 下论文 / 查这篇引用了谁 / 画流程图 / 画技术路线图 / 画示意图 / 画数据图表 / 论文配图 / 机制图 / 按学校模板排版 / 论文排版 / 格式调成学校要求 / 导出可提交的 PDF / 查重 / 测 AI 生成风险 / 查论文格式 / 论文评级 / 图有没有造假 / 参考文献对不对 / 引用有没有被撤稿 / 还剩多少点」时使用。需要已配置 OwlWrite MCP（owlwrite）。"
+version: 1.3.0
+description: "论文全流程工作台（夜猫子）：背靠全球 12 亿级文献资源（8000 万篇授权中文期刊，检索命中可取授权全文 PDF；外文 OA 文献免费取全文）与维普官方检测服务。文献检索、引文追溯、论文写作、科研配图（TikZ 矢量示意图 / 数据图表 / AI 科研配图）、按学校模板排版出 PDF、查重、AIGC 检测、格式检测、斟知智评评级、数据与图像可信度检测、参考文献质量检测、斟校对、引文核验与撤稿把关、余额与充值。当用户说「写论文 / 找文献 / 查文献 / 下论文 / 查这篇引用了谁 / 画流程图 / 画技术路线图 / 画示意图 / 画数据图表 / 论文配图 / 机制图 / 按学校模板排版 / 论文排版 / 格式调成学校要求 / 导出可提交的 PDF / 查重 / 测 AI 生成风险 / 查论文格式 / 论文评级 / 图有没有造假 / 参考文献对不对 / 引用有没有被撤稿 / 还剩多少点」时使用。安装后即可使用：不配置 MCP 也能直接用（可选支持 MCP 接入）。"
 description_zh: "论文全流程工作台：找文献、写初稿、按学校模板排版导出可提交的 PDF、跑查重与 AIGC 检测、核验引文，全程在对话里完成，产物自动落到本机。"
 description_en: "End-to-end paper workbench: literature search, drafting, school-template typesetting to a submission-ready PDF, similarity and AI-content checks, citation verification — all inside the chat."
 examples_zh:
@@ -37,7 +37,77 @@ recommends:
 官网 https://paper.skillsutra.cn 是「可选的图形界面」——看报告原件、看余额流水、管理 Key；
 不是必经之路。只有当用户明确说「我想自己看看页面」或需要发票/企业合作时，才推送（见第四节）。
 
+## 〇、接入方式（两条，能力完全等价）
+
+**先判断用哪条，再干活：**
+
+| 情况 | 用哪条 |
+|---|---|
+| 你的工具列表里有 `owl_search` / `owl_wallet` 等 `owl_` 开头的工具 | **MCP 模式**：直接调工具，跳过本节 |
+| 没有这些工具 | **命令行模式（默认，无需任何配置）**：执行 `python <技能目录>/scripts/owl.py <子命令>` |
+
+**命令行模式是默认路径**：装好技能 + 保存一次 key 就能用，不需要编辑任何配置文件、不需要装依赖、不需要重启客户端。只用 Python 标准库（≥3.8）。
+
+### 0.1 三步上手（新用户）
+
+1. **注册拿 key**：两步 curl，在对话内完成——
+   ① 发验证码：`curl -s -X POST https://owl.skillsutra.cn/v1/auth/send-code -H "Content-Type: application/json" -d '{"email":"<用户邮箱>"}'`，告诉用户「去看邮箱，15 分钟内有效」；
+   ② 用户报 6 位码后：`curl -s -X POST https://owl.skillsutra.cn/v1/auth/register -H "Content-Type: application/json" -d '{"email":"<邮箱>","code":"<6位码>"}'`，返回的 `api_key`（`owl_sk_` 开头）只显示一次。
+   完整流程与常见返回（`email_cooldown` / `email_exists` 等）见 §一 第 2 条。
+2. **保存 key**（不要写进命令行参数，避免留在 shell 历史里）：
+   `echo <api_key> | python <技能目录>/scripts/owl.py init`
+   init 会先校验 key 再保存；若本机已保存过**其他账号**的 key，必须加 `--force` 才会覆盖（防止误换账号）。
+   写入 `~/.owl_creds.json`（权限 0600，旧文件自动备份为 .bak）。也可用环境变量 `OWL_API_KEY`。
+3. **自检**：`python <技能目录>/scripts/owl.py doctor` —— **无 key 也能测连通性**（匿名调 `/v1/meta`）；会同时检查版本更新（本地版本 vs 服务端最新/强制更新要求）；任一项失败退出码 2。一次看清 Python/凭据/连通性/版本/排版是否开放/余额。
+
+### 0.2 命令表（21 个能力与 MCP 工具一一对应 + wait/init/doctor 3 个 CLI 专属命令）
+
+| 能力 | 命令 | MCP 对应 |
+|---|---|---|
+| 保存 key | `owl.py init`（CLI 独有，见 0.1） | — |
+| 自检/连通性/版本 | `owl.py doctor`（CLI 独有，见 0.1） | — |
+| 文献检索 | `owl.py search "检索词" --limit 5` | `owl_search` |
+| 价目表 | `owl.py products` | `owl_products` |
+| 版本/公告/通道就绪 | `owl.py meta` | `owl_meta` |
+| 学科码表 | `owl.py disciplines` | `owl_disciplines` |
+| 报价（不扣费） | `owl.py quote --action write --params '{...}'` | `owl_quote` |
+| 上传文件 | `owl.py upload <文件>` | `owl_upload` |
+| 执行任务 | `owl.py run --quote <quote_id>` | `owl_run` |
+| 查状态 | `owl.py status <run_id>` | `owl_run_status` |
+| **分块等待** | `owl.py wait <run_id> --timeout 120` | （MCP 内轮询的等价物） |
+| 报告 | `owl.py report <run_id> [--part simple]` | `owl_run_report` |
+| 写作全文 | `owl.py content <run_id> --save draft.md` | `owl_run_content` |
+| 配图 | `owl.py figure --mode tikz --desc "..."` | `owl_figure` |
+| 排版 | `owl.py typeset 论文.docx --mode docx --template 模板.docx` | `owl_typeset` |
+| 余额 | `owl.py wallet` | `owl_wallet` |
+| 充值 | `owl.py recharge --amount 10` | `owl_recharge` |
+| 充值状态 | `owl.py recharge-status <单号>` | `owl_recharge_status` |
+| 中文全文 | `owl.py fulltext <identifier>` | `owl_fulltext` |
+| 文献详情 | `owl.py article <identifier>` | `owl_article` |
+| 外文 OA | `owl.py oa --doi 10.xxxx/yyy` | `owl_oa` |
+| 引文追溯 | `owl.py citations <doi> --direction cited` | `owl_citations` |
+| 活动/券码 | `owl.py campaign [--code XXXX]` | `owl_campaign` |
+| 收藏截图领积分 | `owl.py claim-favorite <截图>` | `owl_claim_favorite` |
+
+**下文所有 owl_xxx 工具名，在命令行模式一律按本表右列对照为子命令执行（如 owl_run_status → owl.py status、owl_recharge_status → owl.py recharge-status）；正文不再重复 CLI 写法。**
+
+### 0.3 硬规矩（命令行模式）
+
+0. **安全边界**：只有用户本人明确提供 key 时才执行 init；不要替用户「猜」或编造 key。
+1. **全局参数必须写在子命令前面**：`--json` / `--out` / `--base` 写在子命令后（如 `owl.py content <run_id> --json`）会报 unrecognized arguments，正确写法是 `owl.py --json content <run_id>`。
+2. **长任务不要一次等到底**：`run` 只返回 `run_id`；用 `wait --timeout 120` 分块轮询，没结束就**再调一次**（任务在服务端继续跑，绝对不要重建单）。写作 3–5 分钟、查重 1–3 分钟属正常。
+3. **输出默认精简**：长正文被截断并注明字数；要全文用 `--json`，或 `content --save <文件>` 直接落盘。
+4. **错误按 code 处理**：命令失败会输出 `{"error": "...", "message": "..."}` 并返回退出码 2，照 §七 的错误码表处理，不要盲目重试。
+
+### 0.4 MCP 接入（可选，给不能执行命令的客户端）
+
+Claude Desktop / Cursor 等支持自定义 MCP 的客户端，仍可按 `references/mcp-setup.md` 配置——两条路径能力与字段完全一致，选一条即可。**已经在用 MCP 的用户不需要任何改动。**
+
 ## 一、开工前 60 秒（每次都做）
+
+**下文所有 owl_xxx 工具名，在命令行模式一律按 0.2 命令表右列对照为子命令执行；正文不再重复 CLI 写法。**
+
+**尚未注册/保存 key 时，先完成 0.1 三步再回到本节。**
 
 0. **开工校准（先版本，后干活）**：调一次 `owl_meta`，按返回**三级判定**：
    - **强制更新**：`required_update` 为真 且 本地版本低于 `min_supported_version`
@@ -62,18 +132,20 @@ recommends:
       返回 `masked`（脱敏邮箱）与 `cooldown_seconds`。**这一步要告诉用户"去看邮箱，15 分钟内有效"**。
    2) 让用户把 6 位验证码发给你，再注册：
       `curl -s -X POST https://owl.skillsutra.cn/v1/auth/register -H "Content-Type: application/json" -d '{"email":"<邮箱>","code":"<6位码>"}'`
-      返回的 `api_key`（`owl_sk_` 开头）只显示一次，立刻让用户存好，并写进 MCP 配置的 `env.OWL_API_KEY`。
+      返回的 `api_key`（`owl_sk_` 开头）只显示一次，立刻让用户存好；随后执行
+      `echo <api_key> | python <技能目录>/scripts/owl.py init` 保存（init 会先校验 key 再保存；
+      本机已有其他账号的 key 时加 `--force` 才会覆盖。MCP 用户写进 `env.OWL_API_KEY`）。
    - 常见返回：`email_cooldown`（60 秒内重复发码）、`ip_rate_limited`（同网络 10 分钟发码超 10 次）、
      `code_invalid`（错码，剩几次会说）、`code_expired`（超 15 分钟或已用过）、`email_not_allowed`（一次性临时邮箱）、
      `email_exists`（这邮箱早已注册 → 别换邮箱硬注册，**改用下面的验证码登录**）。
      这些都要照原话转述给用户并给下一步动作，不要重试刷请求。
-   - 备用方式：官网右上角「开始使用」注册。配置细节见 `references/mcp-setup.md`。
+   - 备用方式：官网右上角「开始使用」注册。上手细节见 `references/quickstart.md`；可选 MCP 接入见 `references/mcp-setup.md`。
 
    **B. 老用户找回（验证码登录）**：
    1) `curl -s -X POST https://owl.skillsutra.cn/v1/auth/login-code -H "Content-Type: application/json" -d '{"email":"<用户邮箱>"}'`
    2) 用户报 6 位码后：
       `curl -s -X POST https://owl.skillsutra.cn/v1/auth/login-code/verify -H "Content-Type: application/json" -d '{"email":"<邮箱>","code":"<6位码>"}'`
-   - 返回 `api_key` 只显示一次，让用户存好并写进 MCP 配置；**旧 key 不会失效**，装了好几台设备互不影响。
+   - 返回 `api_key` 只显示一次，让用户存好并用 `owl.py init` 保存（MCP 用户写进配置）；**旧 key 不会失效**，装了好几台设备互不影响。
    - 返回带 `auto_revoked` 时说明该账号活跃凭据已达 10 个，系统自动停用了最久未用的 `auto_revoked` 前缀那把 —— 必须主动告诉用户。
    - 只认**注册时的那个邮箱**；换邮箱收不到码（返回 `email_not_found` 就提示他先注册或换回原邮箱）。
 3. **报价永远先于执行**：任何付费动作 = `owl_quote` → 把价格和扣积分讲清楚 → 用户点头 → `owl_run`。
@@ -193,9 +265,9 @@ recommends:
 - 结算后如实报「实际 X 字，扣 Y 点」——数字只从工具返回取。
 
 流程：`owl_quote`（action="write"，params：`topic` 必填、`target_chars` 建议 3000–8000、`mode` 必答）
-→ 报价转述（含「估算仅作参考」一句）→ 用户确认 → `owl_run` 拿 `run_id` → 每 5 秒
-`owl_run_status` 轮询到 `succeeded` / `failed` → `owl_run_content` 取**完整正文 + 参考文献**
-（列表接口只给截断摘要），存 `03-稿件/正文-draft<N>.md`。
+→ 报价转述（含「估算仅作参考」一句）→ 用户确认 → `owl_run` 拿 `run_id` → 循环
+`owl.py wait <run_id> --timeout 120`（没结束就再调一次，勿重建单）到 `succeeded` / `failed`
+→ `owl_run_content` 取**完整正文 + 参考文献**（列表接口只给截断摘要），存 `03-稿件/正文-draft<N>.md`。
 
 **写作产出的参考文献要并入 `02-文献/references.csv`**（题名/年/DOI 能取到的都写进去），
 否则下次续写「先查 csv 不重复检索」永远命中不了，白花钱。最后把文件路径 + 字数 + 实扣积分报给用户。
@@ -223,7 +295,7 @@ recommends:
    {"content": "论文全文纯文本", "product": "1026", "class_id": 508, "title": "标题", "author": "作者"}
    ```
    - **先上传再报价**（`owl_upload`）：`owl_upload(file_path="D:/论文/定稿.docx")` → 返回 `file_id`
-     （文档 docx/doc/pdf/txt，图片 png/jpg/tif/bmp/gif/webp，单文件 ≤30MB）→ 把 `file_id` 放进 quote。
+     （文档 docx/doc/pdf/txt，图片 png/jpg/tif/bmp/gif/webp；zip 包上限 60MB，其他单文件 30MB）→ 把 `file_id` 放进 quote。
      **直接把本机路径当参数传是没用的**：服务在云端，读不到你机器上的 `D:/…`，会直接报错。
    - `hanzi`：汉字数，**报价必给**（报价阶段不解析文件，只给 `file_id` 会 422）。它**只用于出价**；
      执行时以服务端解析出的**真实字符数**为准——比估算多就按实际收，少也按实际收，**没有封顶、没有下限**。
@@ -363,7 +435,7 @@ recommends:
 构建脚本（`Makefile`、`.latexmkrc` 等）会被忽略，用户可以放心打包。
 
 注意体积有两套限制，别混着说：排版工程包是「单文件 20MB / 整包 60MB」（排版服务自己校验）；
-`owl_upload` 上传通道的「30MB」是检测/配图等场景的单文件上限，跟排版无关。
+`owl_upload` 上传通道是「zip 包 60MB / 其他单文件 30MB」，是检测/配图等场景的上限，跟排版无关。
 
 **能力边界**：不做内容改写、不代写；`.eps` 请转 pdf/png；需要联网的宏包和 `\write18` 一律用不了；
 扫描件、加密文件、带宏的 docm 直接说做不了。完整说明与失败话术见 `references/typeset.md`。
@@ -442,7 +514,7 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 - 用户问「有没有优惠 / 怎么便宜点」，或余额不足时，才调 `owl_campaign`（不带参数）看活动与邀请码；
   平时**不要主动提**，更不要在每次对话里塞促销。
 - **收藏活动（进行中则 owl_campaign 会返回）**：用户在 SkillHub 技能页给 owlwrite-paper 点收藏 →
-  截图发到对话 → 直接把截图交给 `owl_claim_favorite(截图路径)` 提交审核（脚本方式：`scripts/owl_client.py claim-favorite <截图路径>`）→
+  截图发到对话 → 直接把截图交给 `owl_claim_favorite(截图路径)` 提交审核（命令行方式：`owl.py claim-favorite <截图路径>`）→
   通过自动到账 **5000 活动积分（90 天）**。截图要求必须讲清：
   ①要能看到技能 id（形如 `@user_xxx/owlwrite-paper`，网址栏或页面信息都行）；
   ②必须是**已收藏**状态（亮星 + 按钮显示「取消收藏」）；③**不要上传官方样例图**（带水印会被拒）。
@@ -547,21 +619,9 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 
 ## 十、版本记录
 
-> 对外首发即 1.0.0，不设内部中间版本（2026-10-27 用户定）。下列能力全部包含在首发版内。
-
-- **1.1.9**：新增**论文排版**——把 LaTeX 工程或 Word 论文按目标学校的格式排成可提交的 PDF（Word 稿另出同版式 Word），
-  出稿附一份逐项实测的格式体检单（纸张、页边距、字体字号、首行缩进、标题字号）。
-  排版过程中能自动处理的常见问题（缺结尾标记、参考文献样式名不兼容、图片缺失、文档类未启用中文）
-  会当场修好并在结果里说明改了什么。**同一份稿在 72 小时内改格式重排，只收 1 积分工本**（不重复收费），
-  排版失败不计费。**该能力已开放**：暂不可用时会直接告知，不会让用户白等。
-
-- 1.0.0：对外首发版。文献检索（相关性重排 + 核心期刊标记 + 关键词扩展 + 引文追溯）、论文写作（按实际成文字数结算）、
-  中文期刊授权全文下载、外文 OA 免费全文、**科研配图（TikZ 矢量示意图 / 数据图表 / AI 科研配图，25 积分/张，未交付不收费）**、
-  21 个检测商品、引文核验（含撤稿把关）、
-  积分体系（1 积分 = 0.01 元，全平台缓存窗口 72 小时、命中统一 1 积分）、产物自动落盘、活动券码与邀请查询；
-  **每次对话结束固定给三段收尾**——本次积分消耗明细与剩余余额（含 30 天内到期提醒）、成果物真实路径清单、
-  整条流程的已完成与待办进度，并支持一句话压缩版。
-- 1.0.1：新增「技能矩阵」推荐区——写完/查完按你的下一步顺手转介配套技能（科研方法论谋士、方法论提炼、总路由）；想用浏览器体验完整写作与检测，用夜猫子写过论文后可直接打开写作平台 write.vipslib.com。
+- 版本记录统一见文末「迭代日志 (Changelog)」，当前版本 **1.3.0**。
+- 对外首发即 1.0.0，不设内部中间版本（2026-10-27 用户定）。
+- 本节不再单独维护版本史，以文末 Changelog 为唯一口径。
 
 ## 技能矩阵 · 下一步顺手推（按用户下一步意图转介，别硬推）
 
@@ -580,6 +640,7 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 
 ## 迭代日志 (Changelog)
 
+- v1.3.0 (2026-11-09)：**不再需要配置 MCP 就能用**——装好技能、把 key 粘进对话保存一次，直接在对话里检索、写作、检测、排版；无需编辑配置文件、无需安装依赖、无需重启客户端。原来的 MCP 接入方式继续保留（支持 MCP 的客户端照旧可用），两条路径能力完全一样。写作、查重这类要跑几分钟的任务改为分批等待，不会再因为等太久被中断。
 - v1.2.3 (2026-11-07)：赠送积分的可用范围说明清楚了——能用在写作（累计上限 2000）、排版与配图等，检测类要用充值积分；额度按累计计算，用完即止，不会按天重置。注册赠送与推广期加赠的规则也一并写明。
 - v1.2.2 (2026-11-04)：说明文档与工具清单做了一次全面校对——能力总览、工具数量、报价与排版入口、余额字段、错误码指引都与实际提供的能力一致；计量单位统一叫「积分」，和账单、充值记录里的说法完全对上，不再两套叫法混着出现。
 - v1.2.1 (2026-11-04)：新增 MCP 自助接入指引——用 Claude Desktop / Cursor / Claude Code / Cline / Codex CLI 等支持自定义 MCP 的助手时，照文档里的配置模板三步就能接上（注册拿 Key、装两个依赖、贴一段配置）；引文核验与参考文献质量检测补了选型说明——逐条自查用核验、投稿前整篇体检用质量检测，不再拿不准用哪个；平台公告（如活动、服务状态）会随结果附一句话转告，不打断任务。
@@ -593,6 +654,6 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 - v1.1.3 (2026-10-30)：安装与更新只认两个官方入口（SkillHub / ClawHub），地址直接写在技能里，不必再猜去哪装；检测前先看服务是否可用，提示暂不可用就是真不可用，不用白等；检测计价单位统一按字符说明（千字符 / 万字符），报价数字与实际扣费的换算规则一致。
 - v1.1.2 (2026-10-30)：检测报告可按需取四份（综合报告 / 逐句比对 / 简洁版 PDF / 原文对照 PDF），要 PDF 存档或交给老师时直接说一句即可，不再只有网页版；检测完成后可直接问出结论（重复率、评级或格式差错数）；本机文件可直接上传后送检，纯文本粘贴同样能测；下单不再预扣超出应付的额度，余额够实际价就能开工。
 - v1.1.1 (2026-10-29)：深度模式补充篇幅说明（篇幅较大时建议用标准模式，深度模式逐章推进、耗时更长）；下单前能先了解两种模式的耗时与成文差异。
-- v1.1.0 (2026-10-29)：写作模式改为必答（standard/guided 对比表帮用户决策）；计费规则更新为「估算仅作参考，以实际扣除为准」（按字符精确结算，无冻结无上限）；充值支持微信/支付宝双渠道自选，支付后自动继续任务，无需口头确认；检测开工前先看服务是否就绪；智评学科编码改为实时拉取码表逐级筛选；新增官方脚本 owl_client.py 与本地支付页模板；新增典型场景预算参考与检索 query 写法指南；新增收藏赠积分活动参与说明。
+- v1.1.0 (2026-10-29)：写作模式改为必答（standard/guided 对比表帮用户决策）；计费规则更新为「估算仅作参考，以实际扣除为准」（按字符精确结算，无冻结无上限）；充值支持微信/支付宝双渠道自选，支付后自动继续任务，无需口头确认；检测开工前先看服务是否就绪；智评学科编码改为实时拉取码表逐级筛选；新增官方命令行脚本与本地支付页模板；新增典型场景预算参考与检索 query 写法指南；新增收藏赠积分活动参与说明。
 - v1.0.3 (2026-10-28)：优化按需转介的提示方式——推荐安装时改为告知你在技能市场自行搜索安装，不再附安装链接。
 - v1.0.2 (2026-10-28)：新增按需转介——写作产出引文后或交稿前，主动推荐参考文献验真技能，安装后直接批量验真本篇全部引文，无需重新整理列表。

@@ -47,7 +47,7 @@ OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # ⚠️ 发布前必须与 SKILL.md 的 version / connector-meta.version / meta.json latest_version
 #    四处对齐（preflight A30 守门），否则装的是最新版也会被自己判成旧版——每次开工都
 #    提示「有新版本」，而更新完还是同一句（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.2.3"
+OWL_SKILL_VERSION = "1.3.0"
 
 mcp = MCPServer(
     "owlwrite",
@@ -269,7 +269,7 @@ async def _upload_local(file_path: str, max_mb: int = 60) -> dict:
     网关侧按扩展名再判一次上限：.zip=60MB，其它=30MB；这里只是提前给出可读的报错，
     避免用户传了 55MB 的 zip 才发现服务端不认。
     """
-    p = os.path.expanduser(str(file_path or "").strip().strip('"'))
+    p = os.path.expanduser(str(file_path or "").strip().strip('"').strip("'"))
     if not os.path.isfile(p):
         raise ToolError(json.dumps({"error": "file_not_found",
                                     "message": f"本机找不到这个文件：{p}"}, ensure_ascii=False))
@@ -455,7 +455,7 @@ async def owl_figure(mode: str, description: str, count: int = 1,
     if not rid:
         return _dump(r)
     final = {}
-    for _ in range(120):                      # 最长约 6 分钟（AI 配图通常 1–3 分钟）
+    for _ in range(60):                       # 最长约 180 秒，与 CLI（owl.py figure --timeout 180）一致
         await asyncio.sleep(3)
         g = await _call("GET", f"/v1/runs/{rid}")
         if isinstance(g, dict) and g.get("status") in ("succeeded", "failed", "cancelled"):
@@ -598,12 +598,18 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
             body["refs_std"] = refs_std
 
     # 排版要真跑 LaTeX，实测 4–15 秒、大稿可到 1–2 分钟：超时必须放宽，不能沿用 120s
+    # 只对传输层异常（超时/连不上）给人话；服务端业务错误（如余额不足/参数错）
+    # 由 _call 抛 ToolError 原样透传，不得误报成「超时、未扣费」诱导重试
     try:
         r = await _call("POST", "/v1/typeset", body, timeout=httpx.Timeout(330.0, connect=10.0))
-    except Exception as exc:  # noqa: BLE001 — 超时要给人话，不能把 httpx 异常抛给用户
+    except httpx.TimeoutException:
         return _dump({"error": "timeout",
                       "message": "这次排版没有在预期时间内完成，可能是一次性的引擎卡住（不代表你的稿有问题）。"
                                  "可以原样重试一次；本次未扣费。",
+                      "detail": "typeset 超过 330 秒未返回"})
+    except httpx.HTTPError as exc:
+        return _dump({"error": "network_error",
+                      "message": "连不上服务端，请检查网络后重试；若持续出现请反馈。",
                       "detail": str(exc)[:200]})
     out = dict(r or {})
     for k, src in (("pdf_url", "pdf_path"), ("docx_url", "docx_path")):
@@ -649,14 +655,14 @@ async def owl_recharge(amount_cny: int, channel: str = "wechat") -> str:
     之后可用 owl_wallet 确认余额。用户未明确同意前不要调用本工具。
     """
     if amount_cny not in (10, 30, 50, 100, 500):
-        return _dump({"code": "bad_amount", "message": "充值档位仅支持 10/30/50/100/500 元"})
+        return _dump({"error": "bad_amount", "message": "充值档位仅支持 10/30/50/100/500 元"})
     r = await _call("POST", "/v1/pay/recharge",
                     {"points": amount_cny * 100, "channel": channel})
     if isinstance(r, dict) and r.get("qr_path"):
         # qr_path 自带 15 分钟签名（recharge.qr_signed_path），这里只需正确的前缀
         r["qr_url"] = PUBLIC_BASE + r.pop("qr_path")
         r["notice"] = ("请把 qr_url 发给用户在浏览器打开并扫码支付；到账约 1 分钟，"
-                       "支付后可用 owl_run_recharge_status 或 owl_wallet 确认。"
+                       "支付后可用 owl_recharge_status 或 owl_wallet 确认。"
                        "不要重复调用本工具——重复创建会产生多笔未支付订单。")
     return _dump(r)
 
@@ -675,7 +681,7 @@ async def owl_fulltext(identifier: str) -> str:
     Args:
         identifier: 检索结果里的 Identifier 字段（纯中文库文献；全球库无全文下载）。
 
-    计费：200 积分/篇（¥2）；72 小时内同一 identifier 重取只收 1 积分；单账号每日上限 100 篇。
+    计费以实时报价为准（owl_products 可查）；72 小时内同一 identifier 重取只收 1 积分；单账号每日上限 100 篇。
     拿到 url 后用 HTTP GET 直接下载（返回 PDF 字节流），建议存到项目目录 02-文献/fulltexts/，
     文件名用「一作-年份-题名前20字.pdf」。404 fulltext_unavailable 表示该文献没有授权全文，
     如实告诉用户，不要换参数重试。
@@ -691,7 +697,7 @@ async def owl_article(identifier: str, lang: str = "zh") -> str:
         identifier: 检索结果里的 Identifier 字段。
         lang: zh=中文库（默认）/ en=全球库。
 
-    计费：4 积分/次；72 小时内查过同一篇按缓存价 1 积分。用于：用户要某篇的 DOI、
+    计费以实时报价为准（owl_products 可查）；72 小时内查过同一篇按缓存价 1 积分。用于：用户要某篇的 DOI、
     要核对某篇的年卷期页码、或检索结果摘要不够需要完整元数据时。
     404 article_not_found 表示库里没有该文献详情，如实告诉用户。
     """
@@ -711,7 +717,7 @@ async def owl_oa(doi: str = "", title: str = "") -> str:
       - 有 pdf_url → 直接 HTTP GET 下载，存 02-文献/fulltexts/
       - 只有 landing_page → 把链接给用户，页面里点下载（也算免费）
       - closed → 如实说「这篇在付费墙内，没有合法免费全文」，不要暗示能弄到
-    中文文献不要用本工具，用 owl_fulltext（授权全文，200 积分/篇）。
+    中文文献不要用本工具，用 owl_fulltext（授权全文，价格以实时报价为准）。
     """
     body = {}
     if doi and doi.strip():
@@ -719,7 +725,7 @@ async def owl_oa(doi: str = "", title: str = "") -> str:
     if title and title.strip():
         body["title"] = title.strip()
     if not body:
-        return _dump({"code": "bad_params", "message": "doi 或 title 至少给一个"})
+        return _dump({"error": "bad_params", "message": "doi 或 title 至少给一个"})
     return _dump(await _call("POST", "/v1/oa", body))
 
 
@@ -732,7 +738,7 @@ async def owl_citations(doi: str, direction: str = "refs", limit: int = 20) -> s
         direction: refs=它引用了谁（找源头/经典）；cited=谁引用了它（找后续进展/最新研究）。
         limit: 返回条数，1-50，默认 20。
 
-    计费：2 积分/次；72 小时内同篇同方向缓存 1 积分。
+    计费以实时报价为准（owl_products 可查）；72 小时内同篇同方向缓存 1 积分。
     返回 items 里带 cited_by（被引次数，判断影响力）与 is_oa（可直接免费用 owl_oa 取全文）。
     """
     return _dump(await _call("GET", "/v1/citations",
