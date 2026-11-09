@@ -3,8 +3,9 @@
 """OwlWrite 接口层（2026-11-09，v1.3.0）。
 
 CLI（`owl.py`）的唯一接口层，只用标准库（urllib），零第三方依赖——这是「不配 MCP 也能用」的地基。
-MCP 服务器（mcp_server.py）是独立实现（异步 httpx，远程常驻场景不能引入同步阻塞），
-两条路径的能力对齐由 parity 测试守护（_tools/test_cli_parity.py）。
+MCP 服务器（mcp_server.py）是独立实现（异步 httpx，远程常驻场景不能引入同步阻塞）；
+两条路径的能力对齐由发布仓的 parity 测试守护（owlwrite-paper 仓库 `_tools/test_cli_parity.py`，
+不在技能分发包内）。
 
 约定：
   · 所有函数返回 dict（服务端 JSON 原样，字段名与服务端一致）；
@@ -282,7 +283,13 @@ def request(method, path, body=None, params=None, key=None, base=None, timeout=1
                            f"服务暂时不可用（HTTP {status}），请稍后重试；若持续出现请把当前操作反馈给客服",
                            status, {})
         extra = {k: v for k, v in err.items() if k not in ("code", "message", "detail")}
-        raise ApiError(code or f"http_{status}", msg or f"服务返回错误（HTTP {status}）",
+        code = code or f"http_{status}"
+        if code == "unauthorized" or (status == 401 and code in ("http_401",)):
+            # 401 ≠ key 无效：先区分「没带凭据」与「key 无效」，别让用户白改 key（验收报告 P0-2）
+            extra["tip"] = ("401 有两种：code=unauthorized 表示请求没带凭据（多为旧版脚本或匿名接口误用，"
+                            "重跑 owl.py doctor 排查），code=invalid_key 才是 key 无效。"
+                            "先看 code 再决定是否让用户重签 key。")
+        raise ApiError(code, msg or f"服务返回错误（HTTP {status}）",
                        status, extra)
     if not isinstance(out, dict):  # 200 但响应不是 JSON 对象（维护页/异常网关）
         raise ApiError("bad_response",
@@ -324,7 +331,8 @@ def meta(key=None, base=None):
 
 
 def disciplines(key=None, base=None):
-    return request("GET", "/v1/disciplines", key=key, base=base, auth=False)
+    # 服务端要求鉴权（无 Bearer 恒 401）——务必带 key（TeleAgent 验收报告 P0-1，2026-11-10）
+    return request("GET", "/v1/disciplines", key=key, base=base)
 
 
 def quote(action, params, key=None, base=None):

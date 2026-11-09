@@ -80,19 +80,22 @@ def emit_err(exc):
 
 def build_parser():
     p = argparse.ArgumentParser(
-        prog="owl.py", description="OwlWrite 命令行（无需 MCP 配置）")
-    p.add_argument("--base", help="网关地址（默认 https://owl.skillsutra.cn；写子命令前面）")
+        prog="owl.py",
+        description="OwlWrite 命令行（无需 MCP 配置）",
+        epilog="注意：全局参数（--base / --json / --out）必须写在子命令前面，"
+               "如 owl.py --json content <run_id>；写在子命令后面会报 unrecognized arguments。")
+    p.add_argument("--base", help="网关地址（默认 https://owl.skillsutra.cn；必须写在子命令前面）")
     p.add_argument("--json", action="store_true", help="输出完整 JSON（不截断长文本）")
     p.add_argument("--out", help="把完整 JSON 另存到文件")
     # 注意：出于安全考虑不提供 --key 参数（key 会进进程命令行被同机进程看到）。
     # key 只走环境变量 OWL_API_KEY 或凭据文件 ~/.owl_creds.json。
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("search", help="文献检索")
-    s.add_argument("query")
-    s.add_argument("--limit", type=int, default=5)
-    s.add_argument("--lang", default="all", choices=["all", "zh", "en"])
-    s.add_argument("--expand", action="store_true")
+    s = sub.add_parser("search", help="文献检索（中英；0 结果不扣费）")
+    s.add_argument("query", help="检索词，如 \"生物防腐剂 制备\"")
+    s.add_argument("--limit", type=int, default=5, help="返回条数（默认 5）")
+    s.add_argument("--lang", default="all", choices=["all", "zh", "en"], help="限定语种")
+    s.add_argument("--expand", action="store_true", help="结果不足时自动扩展一次检索词")
 
     sub.add_parser("products", help="全平台价目表")
     sub.add_parser("meta", help="版本 / 公告 / 通道就绪状态")
@@ -101,13 +104,13 @@ def build_parser():
     s = sub.add_parser("quote", help="报价（写作/检测/核验/排版/配图，不扣费）")
     s.add_argument("--action", required=True,
                    choices=["write", "check", "verify", "typeset", "figure"])
-    s.add_argument("--params", required=True, help="JSON 参数，如 {\"topic\":\"…\",\"mode\":\"standard\"}")
+    s.add_argument("--params", required=True, help="JSON 参数；写作 {\"topic\":\"…\",\"mode\":\"standard\",\"target_chars\":6000}；检测(1020)需 content+hanzi（或 pages），content 直传时不会自动估字数")
 
     s = sub.add_parser("upload", help="上传本机文件，拿 file_id")
     s.add_argument("file")
 
-    s = sub.add_parser("run", help="按 quote_id 执行任务，返回 run_id")
-    s.add_argument("--quote", required=True)
+    s = sub.add_parser("run", help="按 quote_id 执行任务，返回 run_id（长任务用 wait 续轮询）")
+    s.add_argument("--quote", required=True, help="quote 接口返回的报价单号")
 
     s = sub.add_parser("status", help="查任务状态")
     s.add_argument("run_id")
@@ -121,7 +124,7 @@ def build_parser():
     s.add_argument("--part", default="", choices=["", "main", "compare", "simple", "fulltext"])
 
     s = sub.add_parser("content", help="写作全文与参考文献")
-    s.add_argument("run_id")
+    s.add_argument("run_id", help="run 返回的任务号")
     s.add_argument("--save", help="把 content 正文另存为文件")
 
     s = sub.add_parser("figure", help="科研配图（tikz / chart / image）")
