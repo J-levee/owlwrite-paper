@@ -1,113 +1,76 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""OwlWrite 官方 HTTP 封装（2026-10-29）。
+"""OwlWrite HTTP 直连工具（兼容保留，安全加固版 2026-11-09，v1.3.0）。
 
-兼容保留脚本；新用法请优先使用 owl.py（命令行）或 MCP 工具。
-
-解决 Agent 直连服务端的三类高频坑：
-  1) 忘带/错写 Content-Type → 服务端 422；本脚本对 POST/PUT 自动 application/json
-  2) Bearer key 散落在对话/命令行里 → 统一从环境变量 OWL_API_KEY 或 ~/.owl_creds.json 读取
-  3) 响应体散在终端里难复核 → --out 把原始 JSON 落盘，供技能包归档
+⚠ 兼容保留脚本：新用法请一律使用 owl.py（命令行）或 MCP 工具。
+本脚本的全部 HTTP 行为都委托给 owl_api（与 owl.py 同一接口层），
+因此自动继承其安全边界：
+  · 只向官方网关（或本机调试地址）发送凭据，其他主机需 OWL_ALLOW_CUSTOM_BASE=1；
+  · 强制 https；拒绝跟随 HTTP 重定向（防 302 带走 Authorization）；
+  · 不提供 --key 参数（key 只走环境变量 OWL_API_KEY 或 ~/.owl_creds.json）。
 
 用法：
   python owl_client.py request GET /v1/me/wallet
   python owl_client.py request POST /v1/quote --data '{"action":"write","params":{...}}' --out quote.json
   python owl_client.py claim-favorite D:/截图/收藏.png
-
-凭据解析顺序：--key 参数 > 环境变量 OWL_API_KEY > ~/.owl_creds.json 的 owl_api_key 字段。
-key 属敏感信息：优先让用户在注册页复制后通过 owl.py init 保存；用户把 key 粘进对话时，
-助手应立即执行 init 落盘并提醒用户可删除对话中的 key。不要把 key 写进任何输出文件或日志。
 """
 import argparse
-import base64
 import json
-import mimetypes
 import os
 import sys
-import urllib.error
-import urllib.request
 
-DEFAULT_BASE = os.environ.get("OWL_BASE", "https://owl.skillsutra.cn")
-
-
-def load_key(explicit=None):
-    if explicit:
-        return explicit.strip()
-    k = os.environ.get("OWL_API_KEY", "").strip()
-    if k:
-        return k
-    for p in (os.path.expanduser("~/.owl_creds.json"),
-              os.path.expanduser("~/.workbuddy/owl_creds.json")):
-        if os.path.exists(p):
-            try:
-                with open(p, encoding="utf-8") as f:
-                    d = json.load(f)
-                k = (d.get("owl_api_key") or d.get("api_key") or "").strip()
-                if k:
-                    return k
-            except Exception:
-                pass
-    sys.exit("未找到 OWL_API_KEY：请设环境变量或写入 ~/.owl_creds.json（owl_api_key 字段）")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import owl_api  # noqa: E402
 
 
-def call(method, path, data=None, key=None, base=None, timeout=120):
-    url = (base or DEFAULT_BASE).rstrip("/") + path
-    headers = {"Accept": "application/json"}
-    body = None
-    if data is not None:
-        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        headers["Content-Type"] = "application/json"       # 坑 1：忘了就是 422
-    # 坑 2：key 统一从环境/文件读——无条件解析，不能只在显式 --key 时带 Authorization
-    #（否则环境变量/凭据文件路径静默失效，全部 401）
-    headers["Authorization"] = "Bearer " + load_key(key)
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+def call(method, path, data=None, base=None, timeout=120):
+    """委托 owl_api.request。返回 (http_status, dict)；错误抛 owl_api.ApiError。"""
+    status_holder = {}
+
+    # owl_api.request 出错抛 ApiError、成功返回 dict；这里借 as_dict 还原状态码
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.status, json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        try:
-            return e.code, json.loads(e.read().decode("utf-8") or "{}")
-        except Exception:
-            return e.code, {"raw": str(e)}
+        out = owl_api.request(method.upper(), path, body=data, base=base, timeout=timeout)
+        return 200, out
+    except owl_api.ApiError as exc:
+        return (exc.http_status or 0), exc.as_dict()
 
 
-def claim_favorite(image_path, key=None, base=None):
-    """提交 SkillHub 收藏截图审核。返回发放结果或拒单原因。"""
-    mime = mimetypes.guess_type(image_path)[0] or "image/png"
-    with open(image_path, "rb") as f:
-        raw = f.read()
-    if len(raw) > 5 * 1024 * 1024:
-        sys.exit("截图超过 5MB，请压缩后重试")
-    return call("POST", "/v1/campaign/favorite-claim",
-                {"image_base64": base64.b64encode(raw).decode()},
-                key=key, base=base, timeout=180)
+def claim_favorite(image_path, base=None):
+    """提交收藏截图审核。返回发放结果或拒单原因。"""
+    p = os.path.expanduser(str(image_path or "").strip().strip('"').strip("'"))
+    data = owl_api.claim_favorite(p, base=base)
+    return 200, data
 
 
 def main():
-    ap = argparse.ArgumentParser(description="OwlWrite 官方 HTTP 封装")
+    ap = argparse.ArgumentParser(description="OwlWrite HTTP 直连（兼容保留，新用法请用 owl.py）")
     ap.add_argument("cmd", choices=["request", "claim-favorite"])
     ap.add_argument("path_or_image", help="request: /v1/... 路径；claim-favorite: 截图路径")
     ap.add_argument("-X", "--method", default="GET", help="request 子命令用（GET/POST/...）")
     ap.add_argument("--data", help="JSON 请求体（字符串）")
-    ap.add_argument("--out", help="响应 JSON 落盘路径（坑 3：方便归档复核）")
-    ap.add_argument("--key", help="显式 API key（默认走环境/凭据文件）")
-    ap.add_argument("--base", default=DEFAULT_BASE)
+    ap.add_argument("--out", help="响应 JSON 落盘路径")
+    ap.add_argument("--base", help="网关地址（默认 https://owl.skillsutra.cn）")
     a = ap.parse_args()
 
     if a.cmd == "claim-favorite":
-        st, out = claim_favorite(a.path_or_image, key=a.key, base=a.base)
+        st, out = claim_favorite(a.path_or_image, base=a.base)
     else:
-        data = json.loads(a.data) if a.data else None
-        st, out = call(a.method.upper(), a.path_or_image, data, key=a.key, base=a.base)
+        try:
+            data = json.loads(a.data) if a.data else None
+        except json.JSONDecodeError as exc:
+            print(json.dumps({"error": "bad_params",
+                              "message": f"--data 不是合法 JSON：{exc}"}, ensure_ascii=False))
+            sys.exit(2)
+        st, out = call(a.method.upper(), a.path_or_image, data, base=a.base)
 
     text = json.dumps(out, ensure_ascii=False, indent=2)
-    print("HTTP", st)
     print(text)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(text)
-        print("已保存 ->", a.out)
-    sys.exit(0 if st < 400 else 1)
+        print("已保存 ->", a.out, file=sys.stderr)
+    # 结构化错误一律退出码 2（与 owl.py 一致）；网络层 http_status=0 也按失败处理
+    sys.exit(0 if 200 <= st < 400 else 2)
 
 
 if __name__ == "__main__":

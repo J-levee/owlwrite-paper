@@ -44,17 +44,6 @@ _ID_RE = re.compile(r"^[A-Za-z0-9_\-]{1,80}$")
 # signed_query 是服务端生成的查询串，只放行安全字符（防开放重定向/参数注入）
 _SQ_RE = re.compile(r"^[A-Za-z0-9=&%_.\-]*$")
 
-# 版本四处同源：SKILL.md / README / scripts/mcp_server.py / connector-meta.json
-OWL_SKILL_VERSION = "1.3.0"
-
-DEFAULT_BASE = "https://owl.skillsutra.cn"
-CREDS_PATHS = (
-    os.path.expanduser("~/.owl_creds.json"),
-    os.path.expanduser("~/.workbuddy/owl_creds.json"),
-)
-NOTICE_SEEN_PATH = os.path.expanduser("~/.owl_notice_seen.json")
-
-
 class ApiError(Exception):
     """服务端结构化错误（code/message/http_status + 附加字段）。"""
 
@@ -243,6 +232,9 @@ def request(method, path, body=None, params=None, key=None, base=None, timeout=1
         "Accept": "application/json",
         "X-Owl-Skill-Version": OWL_SKILL_VERSION,
     }
+    if host not in OFFICIAL_HOSTS and host not in LOCAL_HOSTS:
+        # 非官方主机一律告警（含匿名接口——伪造的价格/公告同样能骗人），凭据类请求再拦
+        print(f"# 警告：请求将发送到非官方网关 {host}", file=sys.stderr)
     if auth:
         # 凭据只发给官方网关（本机调试地址放行）；非官方主机必须显式 OWL_ALLOW_CUSTOM_BASE=1
         if host not in OFFICIAL_HOSTS and host not in LOCAL_HOSTS:
@@ -548,7 +540,8 @@ def typeset(file_path="", mode="latex", template_path="", entry="", pages=0, han
     try:
         q = quote("typeset", qparams, key=key, base=base)
     except ApiError as exc:
-        raise ApiError("quote_failed", str(exc.message)[:300], exc.http_status,
+        # 保留服务端原始错误码（不洗白），只附加可操作的 tip
+        raise ApiError(exc.code, exc.message[:300], exc.http_status,
                        {"tip": "latex 模式必须带 pages（正文页数）；docx 模式请确认文件是 .docx 且没加密。"})
 
     body = {"file_id": file_id, "mode": mode, "quote_id": (q or {}).get("quote_id", "")}
@@ -578,7 +571,7 @@ def typeset(file_path="", mode="latex", template_path="", entry="", pages=0, han
         if exc.code in ("timeout", "network_error"):
             return {"error": "timeout",
                     "message": "这次排版没有在预期时间内完成，可能是一次性的引擎卡住（不代表你的稿有问题）。"
-                               "可以原样重试一次；本次未扣费。",
+                               "扣费状态未知：重试前先用 wallet 查余额核对，避免重复扣费。",
                     "detail": str(exc)[:200]}
         raise
 

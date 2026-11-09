@@ -145,16 +145,26 @@ def _dump(d) -> str:
 
 
 def _raise_if_error(r, data) -> None:
-    """统一错误透传：服务端 code/message/extra 原样抛给 Agent，不包装不吞。"""
+    """统一错误透传：服务端 code/message/extra 原样抛给 Agent，不包装不吞。
+
+    非结构化错误体（HTML 维护页/代理错误页等）不外泄内部细节，只给人话兜底——
+    与 CLI（owl_api.request）同一口径。
+    """
     if r.status_code < 400:
         return
     err = data.get("detail") if isinstance(data.get("detail"), dict) else data
-    code = (err or {}).get("code", f"http_{r.status_code}")
-    msg = (err or {}).get("message") or str(data)[:300]
+    code = str((err or {}).get("code") or "").strip()
+    msg = str((err or {}).get("message") or "").strip()
+    if not (code or msg):
+        raise ToolError(json.dumps(
+            {"error": f"http_{r.status_code}",
+             "message": f"服务暂时不可用（HTTP {r.status_code}），请稍后重试；"
+                        "若持续出现请把当前操作反馈给客服",
+             "http_status": r.status_code}, ensure_ascii=False))
     extra = {k: v for k, v in (err or {}).items()
              if k not in ("code", "message") and k not in ("detail",)}
     raise ToolError(json.dumps(
-        {"error": code, "message": msg, "http_status": r.status_code, **extra},
+        {"error": code or f"http_{r.status_code}", "message": msg, "http_status": r.status_code, **extra},
         ensure_ascii=False))
 
 
@@ -257,6 +267,8 @@ def _docx_hanzi(path: str) -> int:
         import re as _re
         import zipfile
         with zipfile.ZipFile(path) as z:
+            if z.getinfo("word/document.xml").file_size > 64 * 1024 * 1024:  # 防 zip 炸弹
+                return 0
             xml = z.read("word/document.xml").decode("utf-8", "ignore")
         return len(_re.findall(r"[\u4e00-\u9fff]", _re.sub(r"<[^>]+>", "", xml)))
     except Exception:  # noqa: BLE001 — 读不出来就让调用方回退到用户申报的页数
@@ -569,10 +581,17 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
         qparams["hanzi"] = int(hanzi)
     try:
         quote = await _call("POST", "/v1/quote", {"action": "typeset", "params": qparams})
-    except Exception as exc:  # noqa: BLE001 — 页数没给 / 灰度未开，都在这里显性化
-        return _dump({"error": "quote_failed",
-                      "message": str(exc)[:300],
-                      "tip": "latex 模式必须带 pages（正文页数）；docx 模式请确认文件是 .docx 且没加密。"})
+    except ToolError as exc:
+        # 保留服务端原始错误码（不洗白成 quote_failed），只附加可操作的 tip
+        try:
+            payload = json.loads(str(exc))
+        except Exception:  # noqa: BLE001
+            payload = {"error": "quote_failed", "message": str(exc)[:300]}
+        if isinstance(payload, dict):
+            payload.setdefault("tip", "latex 模式必须带 pages（正文页数）；"
+                                      "docx 模式请确认文件是 .docx 且没加密。")
+            raise ToolError(json.dumps(payload, ensure_ascii=False))
+        raise
     body = {"file_id": file_id, "mode": mode, "quote_id": (quote or {}).get("quote_id", "")}
     if pages:
         body["pages"] = int(pages)
@@ -605,7 +624,7 @@ async def owl_typeset(file_path: str = "", mode: str = "latex", template_path: s
     except httpx.TimeoutException:
         return _dump({"error": "timeout",
                       "message": "这次排版没有在预期时间内完成，可能是一次性的引擎卡住（不代表你的稿有问题）。"
-                                 "可以原样重试一次；本次未扣费。",
+                                 "扣费状态未知：重试前先用 owl_wallet 查余额核对，避免重复扣费。",
                       "detail": "typeset 超过 330 秒未返回"})
     except httpx.HTTPError as exc:
         return _dump({"error": "network_error",
