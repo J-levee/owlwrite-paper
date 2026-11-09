@@ -29,7 +29,7 @@ import urllib.request
 import zipfile
 
 # 版本同源：SKILL.md / README / scripts/mcp_server.py / connector-meta.json / owl_api.py
-OWL_SKILL_VERSION = "1.3.0"
+OWL_SKILL_VERSION = "1.3.1"
 
 DEFAULT_BASE = "https://owl.skillsutra.cn"
 OFFICIAL_HOSTS = {"owl.skillsutra.cn"}

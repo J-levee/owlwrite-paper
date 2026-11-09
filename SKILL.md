@@ -4,7 +4,7 @@ slug: owlwrite-paper
 displayName: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name_en: OwlWrite Paper Workbench
-version: 1.3.0
+version: 1.3.1
 description: "论文全流程工作台（夜猫子）：背靠全球 12 亿级文献资源（8000 万篇授权中文期刊，检索命中可取授权全文 PDF；外文 OA 文献免费取全文）与维普官方检测服务。文献检索、引文追溯、论文写作、科研配图（TikZ 矢量示意图 / 数据图表 / AI 科研配图）、按学校模板排版出 PDF、查重、AIGC 检测、格式检测、斟知智评评级、数据与图像可信度检测、参考文献质量检测、斟校对、引文核验与撤稿把关、余额与充值。当用户说「写论文 / 找文献 / 查文献 / 下论文 / 查这篇引用了谁 / 画流程图 / 画技术路线图 / 画示意图 / 画数据图表 / 论文配图 / 机制图 / 按学校模板排版 / 论文排版 / 格式调成学校要求 / 导出可提交的 PDF / 查重 / 测 AI 生成风险 / 查论文格式 / 论文评级 / 图有没有造假 / 参考文献对不对 / 引用有没有被撤稿 / 还剩多少点 / 校对 / 改错别字 / 帮我校对论文 / 充值 / 交钱买点数」时使用。安装后即可使用：不配置 MCP 也能直接用（可选支持 MCP 接入）。"
 description_zh: "论文全流程工作台：找文献、写初稿、按学校模板排版导出可提交的 PDF、跑查重与 AIGC 检测、核验引文，全程在对话里完成，产物自动落到本机。"
 description_en: "End-to-end paper workbench: literature search, drafting, school-template typesetting to a submission-ready PDF, similarity and AI-content checks, citation verification — all inside the chat."
@@ -116,7 +116,8 @@ Claude Desktop / Cursor 等支持自定义 MCP 的客户端，仍可按 `referen
      ClawHub https://clawhub.ai/j-levee/skills/owlwrite-paper），并说明**余额、历史记录、已落盘文件都不受影响**。
      用户更新完再重新开工。这一步不能跳过、不能商量——旧版继续跑会按旧的计价规则扣费。
    - **普通更新**：仅 `latest_version` 更高 → 一句话提「技能有新版本，可更新（不影响本次使用）」，继续干活。
-   - 注意：`required_update` 只对**低于 `min_supported_version` 的旧版**生效——本地版本 == 最新版时忽略该提示（服务端会对所有版本返回这个字段，属正常现象，不要因此让已最新版的用户去更新）。
+   - 注意：`required_update` 按你的本地版本动态判定——本地版本 == 最新版时该字段必为假；
+     若确见「已是最新版本」之外的强制提示且本地版本并不旧，先跑 `owl.py doctor` 核对连通与版本，再向用户如实转述。
    - **一致** → 静默，不提版本的事。
    `notices` 有新公告按相关度转告，别整段念。
 1. **查余额**：`owl_wallet`（免费）。低于一次任务的预估就提前说，别等扣费失败。
@@ -208,6 +209,8 @@ Claude Desktop / Cursor 等支持自定义 MCP 的客户端，仍可按 `referen
 ### 1. 检索文献（`owl_search`）
 - 参数：`query`（必填，主题/研究问题/关键词组合）、`limit`（默认 5，建议 5–10）、`lang`（`all` 默认 / `zh` / `en`）、
   `expand`（默认 false；结果不足 3 条时会自动扩一次）。
+  **扩展只在实拉时进行**：缓存命中（1 积分）直接返回既有结果、不扩展——需要更全的结果，
+  换个说法再查一次，或等 72 小时缓存过期后实拉。
 - **query 怎么写（检索质量第一决定因素）**：
   - **主词优先**：把最核心的概念放最前（如「生物防腐剂 制备」），别写成整句疑问；
   - **多概念拆两查**：中文概念和英文概念分开查（`生物防腐剂` 一查、`bacteriocin preservation` 一查），
@@ -219,7 +222,8 @@ Claude Desktop / Cursor 等支持自定义 MCP 的客户端，仍可按 `referen
   - `score`：相关性得分。用户问「为什么先推这篇」时，按「题名命中 > 摘要命中 > 核心刊 > 有 DOI > 年份新」解释。
   - `core` / `core_tags`：是否核心期刊。`core_tags` 是官方权威标记（`BDHX` 北大核心 / `CSCD` / `CSSCI` /
     `CSTPCD` / `SCOPUS` / `SCI` 等），**有就直说「北大核心+CSCD 收录」**；`core` 为 `null` 表示补不到收录信息，**不等于非核心**，别下结论。
-  - `is_oa`：是否开放获取（外文命中时有值），`true` 就可以用 `owl_oa` 直接免费取全文。
+  - `is_oa`：是否开放获取（外文命中时有值）：`true` 就可以用 `owl_oa` 直接免费取全文；
+    `null` 表示开放状态未知（保守判定，不猜）——想免费用全文就先调 `owl_oa` 复核。
 - 结果落 `02-文献/`（见第五节），并合并进 `references.csv`（按 DOI/题名去重）。
 - **要全文 —— 先分语言，别一律推付费**：
   - **中文文献** → `owl_fulltext(identifier)` 取 PDF 直链（约 1 小时有效，立即 HTTP GET 下载），
@@ -261,7 +265,9 @@ Claude Desktop / Cursor 等支持自定义 MCP 的客户端，仍可按 `referen
 
 计费规则（**必须原话转告用户**）：
 - **积分估算仅作参考，以实际扣除为准**。写作是后付费：按实际成文字数 × 所选模式
-  每千字单价精确结算，**无冻结、无上限**。报价的 `est_points` / `est_range` 只是预估。
+  每千字单价精确结算，**无冻结、无上限**。报价的 `est_points` / `est_range` 只是预估；
+  区间上限已按目标字数的约 2 倍放宽，但上游成文长度不受字数参数硬约束，
+  实际扣费仍可能高于区间上限（报价返回的 `charge_basis` 有同样说明）。
 - 启动前只做余额软预检（余额 ≥ 估算值才能开跑）；`max_points` 已废除，不再有「冻结上限」概念。
 - 结算后如实报「实际 X 字，扣 Y 点」——数字只从工具返回取。
 
