@@ -4,7 +4,7 @@ slug: owlwrite-paper
 displayName: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name_en: OwlWrite Paper Workbench
-version: 1.3.1
+version: 1.3.2
 description: "论文全流程工作台（夜猫子）：背靠全球 12 亿级文献资源（8000 万篇授权中文期刊，检索命中可取授权全文 PDF；外文 OA 文献免费取全文）与维普官方检测服务。文献检索、引文追溯、论文写作、科研配图（TikZ 矢量示意图 / 数据图表 / AI 科研配图）、按学校模板排版出 PDF、查重、AIGC 检测、格式检测、斟知智评评级、数据与图像可信度检测、参考文献质量检测、斟校对、引文核验与撤稿把关、余额与充值。当用户说「写论文 / 找文献 / 查文献 / 下论文 / 查这篇引用了谁 / 画流程图 / 画技术路线图 / 画示意图 / 画数据图表 / 论文配图 / 机制图 / 按学校模板排版 / 论文排版 / 格式调成学校要求 / 导出可提交的 PDF / 查重 / 测 AI 生成风险 / 查论文格式 / 论文评级 / 图有没有造假 / 参考文献对不对 / 引用有没有被撤稿 / 还剩多少点 / 校对 / 改错别字 / 帮我校对论文 / 充值 / 交钱买点数」时使用。安装后即可使用：不配置 MCP 也能直接用（可选支持 MCP 接入）。"
 description_zh: "论文全流程工作台：找文献、写初稿、按学校模板排版导出可提交的 PDF、跑查重与 AIGC 检测、核验引文，全程在对话里完成，产物自动落到本机。"
 description_en: "End-to-end paper workbench: literature search, drafting, school-template typesetting to a submission-ready PDF, similarity and AI-content checks, citation verification — all inside the chat."
@@ -60,7 +60,7 @@ recommends:
    写入 `~/.owl_creds.json`（权限 0600，旧文件自动备份为 .bak）。也可用环境变量 `OWL_API_KEY`。
 3. **自检**：`python <技能目录>/scripts/owl.py doctor` —— **无 key 也能测连通性**（匿名调 `/v1/meta`）；会同时检查版本更新（本地版本 vs 服务端最新/强制更新要求）；任一必要项失败退出码 2（「排版是否开放」是状态展示，不计入成败）。一次看清 Python/凭据/连通性/版本/排版是否开放/余额。
 
-### 0.2 命令表（21 个能力与 MCP 工具一一对应 + wait/init/doctor 3 个 CLI 专属命令）
+### 0.2 命令表（22 个能力与 MCP 工具一一对应 + wait/init/doctor 3 个 CLI 专属命令）
 
 | 能力 | 命令 | MCP 对应 |
 |---|---|---|
@@ -80,6 +80,7 @@ recommends:
 | 配图 | `owl.py figure --mode tikz --desc "..."` | `owl_figure` |
 | 排版 | `owl.py typeset 论文.docx --mode docx --template 模板.docx` | `owl_typeset` |
 | 余额 | `owl.py wallet` | `owl_wallet` |
+| 逐笔流水（对账） | `owl.py ledger [--limit 50]` | `owl_ledger` |
 | 充值 | `owl.py recharge --amount 10` | `owl_recharge` |
 | 充值状态 | `owl.py recharge-status <单号>` | `owl_recharge_status` |
 | 中文全文 | `owl.py fulltext <identifier>` | `owl_fulltext` |
@@ -134,6 +135,7 @@ Claude Desktop / Cursor 等支持自定义 MCP 的客户端，仍可按 `referen
       返回 `masked`（脱敏邮箱）与 `cooldown_seconds`。**这一步要告诉用户"去看邮箱，15 分钟内有效"**。
    2) 让用户把 6 位验证码发给你，再注册：
       `curl -s -X POST https://owl.skillsutra.cn/v1/auth/register -H "Content-Type: application/json" -d '{"email":"<邮箱>","code":"<6位码>"}'`
+      用户有**邀请码**（好友分享的推广码）时，在注册请求体里加 `"ref":"<邀请码>"` 一起提交——注册成功双方都按平台当前活动规则得积分（规则与额度以官网/公告为准，**不要向用户承诺具体数字**）；没有邀请码就正常注册。
       返回的 `api_key`（`owl_sk_` 开头）只显示一次，立刻让用户存好；随后执行
       `echo <api_key> | python <技能目录>/scripts/owl.py init` 保存（init 会先校验 key 再保存；
       本机已有其他账号的 key 时加 `--force` 才会覆盖。MCP 用户写进 `env.OWL_API_KEY`）。
@@ -184,7 +186,7 @@ Claude Desktop / Cursor 等支持自定义 MCP 的客户端，仍可按 `referen
 | 斟校对 | 同上 | 实拉 | 分钟级 |
 | 引文核验（含撤稿把关） | `owl_quote`+`owl_run_report` | 实拉（72 小时内同条按缓存价） | 逐条秒级 |
 | 产物落盘 | 本地文件 | 免费 | 实时 |
-| 余额 / 充值 / 核对到账 | `owl_wallet` / `owl_recharge` / `owl_recharge_status` | 免费 | 秒级 |
+| 余额 / 逐笔流水（对账）/ 充值 / 核对到账 | `owl_wallet` / `owl_ledger` / `owl_recharge` / `owl_recharge_status` | 免费 | 秒级 |
 | 活动券码 / 我的邀请码 | `owl_campaign` | 免费 | 秒级 |
 | 收藏活动领积分（提交截图） | `owl_claim_favorite` | 免费 | 秒级 |
 
@@ -508,7 +510,8 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 ## 六、余额不足与充值
 
 `insufficient_balance` 时先报差额，**征得同意**再充值（档位 10 / 30 / 50 / 100 / 500 元；
-充值即购买积分，**积分自购买起 1 年有效，先充先用**——报价时要带上这句）。
+充值即购买积分，**积分自购买起 1 年有效，先充先用**——报价时要带上这句；
+**有历史欠费时充值会先自动抵扣欠费**，到账积分 = 充值额 − 欠费额，报价时主动说明，别让用户以为到账少了是出错）。
 
 **支付剧本（双渠道自选 + agent 自动轮询，用户不用口头确认「付好了」）**：
 
@@ -557,6 +560,10 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 | `http_status: 401` + `code: invalid_key` | key 无效或已吊销 | 让用户核对 OWL_API_KEY，或到个人中心重新签发 |
 | `campaign_not_found` / `campaign_expired` | 活动码不存在 / 已过期 | 照原话转告，别换码硬试 |
 | `fulltext_daily_limit` | 今日全文获取达 100 篇 | 告知明天再试，别绕路 |
+| `network_error` / `timeout` | 本机网络不通 / 网关超时 | 重试一次；仍失败再如实转告，**不要连环重试**（检查本机代理/VPN 也是常见根因） |
+| `untrusted_base` | 自定义网关地址不在官方白名单 | 让用户检查 `OWL_BASE` 配置是否被改动过；**不要**向非官方地址发请求或带 key |
+| `purpose_not_allowed`（HTTP 402） | 该用途不可用赠送积分（如检测类） | 按 §0「赠送积分用途上限」口径解释：预检拦截不扣费，引导充值积分 |
+| `duplicate_refund`（HTTP 409） | 同一笔退款重复发起 | 停止重试；说明该单已在退款流程中，用流水确认即可 |
 
 任何情况下都**不要**为了通过请求去改用户数据或重复调用付费接口。
 
@@ -633,7 +640,7 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 
 ## 十、版本记录
 
-- 版本记录统一见文末「迭代日志 (Changelog)」，当前版本 **1.3.0**。
+- 版本记录统一见文末「迭代日志 (Changelog)」，当前版本 **1.3.2**。
 - 对外首发即 1.0.0，不设内部中间版本（2026-10-27 用户定）。
 - 本节不再单独维护版本史，以文末 Changelog 为唯一口径。
 
@@ -654,6 +661,8 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 
 ## 迭代日志 (Changelog)
 
+- v1.3.2 (2026-11-14)：新增流水查询——积分的每一笔收支（充值、消耗、赠送、退款、过期）都能逐笔查到，每笔后面还带着当时的余额，用户问「这笔钱怎么扣的」直接查流水对账，不再只能看余额倒推；错误指引补了网络类错误的处理建议和几种新情况的处理方式；注册/邀请/充值的说明与平台当前规则对齐（充值时会先抵扣历史欠费；带邀请码注册说明；赠送额度以实际到账为准）。
+- v1.3.1 (2026-11-10)：说明更清楚——文献检索扩展结果的缓存规则、免费全文标记的「未知」状态怎么理解、写作预估区间与实际结算口径的关系。
 - v1.3.0 (2026-11-09)：**不再需要配置 MCP 就能用**——装好技能、把 key 粘进对话保存一次，直接在对话里检索、写作、检测、排版；无需编辑配置文件、无需安装依赖、无需重启客户端。原来的 MCP 接入方式继续保留（支持 MCP 的客户端照旧可用），两条路径能力完全一样。写作、查重这类要跑几分钟的任务改为分批等待，不会再因为等太久被中断。
 - v1.2.3 (2026-11-07)：赠送积分的可用范围说明清楚了——能用在写作（累计上限 2000）、排版与配图等，检测类要用充值积分；额度按累计计算，用完即止，不会按天重置。注册赠送与推广期加赠的规则也一并写明。
 - v1.2.2 (2026-11-04)：说明文档与工具清单做了一次全面校对——能力总览、工具数量、报价与排版入口、余额字段、错误码指引都与实际提供的能力一致；计量单位统一叫「积分」，和账单、充值记录里的说法完全对上，不再两套叫法混着出现。

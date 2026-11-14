@@ -156,6 +156,9 @@ def build_parser():
     s.add_argument("--date", default="")
 
     sub.add_parser("wallet", help="积分余额")
+    s = sub.add_parser("ledger", help="逐笔积分流水（对账用；含每笔后余额）")
+    s.add_argument("--limit", type=int, default=50, help="条数（默认 50，上限 500）")
+    s.add_argument("--offset", type=int, default=0, help="翻页偏移")
 
     s = sub.add_parser("recharge", help="创建充值订单（10/30/50/100/500 元）")
     s.add_argument("--amount", type=int, required=True)
@@ -350,6 +353,8 @@ def dispatch(args):
             key=k, base=b), args)
     if c == "wallet":
         return emit(owl_api.wallet(key=k, base=b), args)
+    if c == "ledger":
+        return emit(owl_api.ledger(args.limit, args.offset, key=k, base=b), args)
     if c == "recharge":
         return emit(owl_api.recharge(args.amount, args.channel, key=k, base=b), args)
     if c == "recharge-status":

@@ -47,7 +47,7 @@ OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # ⚠️ 发布前必须与 SKILL.md 的 version / connector-meta.version / meta.json latest_version
 #    四处对齐（preflight A30 守门），否则装的是最新版也会被自己判成旧版——每次开工都
 #    提示「有新版本」，而更新完还是同一句（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.3.1"
+OWL_SKILL_VERSION = "1.3.2"
 
 mcp = MCPServer(
     "owlwrite",
@@ -663,6 +663,17 @@ async def owl_wallet() -> str:
     余额不足以执行下一步时，提示用户去充值，不要重试。
     """
     return _dump(await _call("GET", "/v1/me/wallet"))
+
+
+@mcp.tool()
+async def owl_ledger(limit: int = 50, offset: int = 0) -> str:
+    """查询逐笔积分流水（充值/消耗/赠送/退款/过期），含每笔后的余额轨迹。
+
+    用户质疑某笔扣费、要求对账时调用；按 created_at 倒序，limit 上限 500。
+    """
+    return _dump(await _call("GET", "/v1/me/ledger",
+                             params={"limit": max(1, min(int(limit or 50), 500)),
+                                     "offset": max(0, int(offset or 0))}))
 
 
 @mcp.tool()

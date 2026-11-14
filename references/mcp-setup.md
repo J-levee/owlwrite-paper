@@ -136,7 +136,7 @@ env = { OWL_BASE = "https://owl.skillsutra.cn", OWL_API_KEY = "owl_sk_你的key"
 - **版本判定**：`owl_meta` 的 `required_update=true` 且本地版本低于 `min_supported_version`
   时必须先让用户更新技能再继续付费动作。
 
-## 3. 工具一览（21 个）
+## 3. 工具一览（22 个）
 
 | 工具 | 作用 | 计费 |
 |---|---|---|
@@ -157,6 +157,7 @@ env = { OWL_BASE = "https://owl.skillsutra.cn", OWL_API_KEY = "owl_sk_你的key"
 | `owl_run_report` | 核验逐条判定；检测报告四份（`part=main` 综合 / `compare` 逐句比对 / `simple` 简洁 PDF / `fulltext` 原文对照 PDF） | 免费 |
 | `owl_run_content` | 写作完整正文与参考文献 | 免费 |
 | `owl_wallet` | 查余额（含 30 天内到期积分、赠送积分余额） | 免费 |
+| `owl_ledger` | 逐笔积分流水（含每笔后余额，对账用） | 免费 |
 | `owl_recharge` | 发起充值（10/30/50/100/500 元） | 免费 |
 | `owl_recharge_status` | 查充值单 / 核实到账 | 免费 |
 | `owl_typeset` | 论文排版（LaTeX 工程 / Word 按学校模板 → 可提交 PDF + 同版式 Word + 格式体检单；支持盲审版与 GB/T 7714 双标准；72 小时内同稿重排只收工本） | 实拉（一篇一价） |

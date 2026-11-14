@@ -29,7 +29,7 @@ import urllib.request
 import zipfile
 
 # 版本同源：SKILL.md / README / scripts/mcp_server.py / connector-meta.json / owl_api.py
-OWL_SKILL_VERSION = "1.3.1"
+OWL_SKILL_VERSION = "1.3.2"
 
 DEFAULT_BASE = "https://owl.skillsutra.cn"
 OFFICIAL_HOSTS = {"owl.skillsutra.cn"}
@@ -611,6 +611,17 @@ def typeset(file_path="", mode="latex", template_path="", entry="", pages=0, han
 
 def wallet(key=None, base=None):
     return request("GET", "/v1/me/wallet", key=key, base=base)
+
+
+def ledger(limit=50, offset=0, key=None, base=None):
+    """逐笔积分流水（充值/消耗/赠送/退款/过期/佣金），含每笔后的余额轨迹。
+
+    用户问「钱怎么少/多了一笔」时用它对账，不要靠余额差倒推。
+    """
+    return request("GET", "/v1/me/ledger",
+                   params={"limit": max(1, min(int(limit or 50), 500)),
+                           "offset": max(0, int(offset or 0))},
+                   key=key, base=base)
 
 
 def recharge(amount_cny, channel="wechat", key=None, base=None):
