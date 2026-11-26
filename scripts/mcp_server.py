@@ -47,7 +47,7 @@ OWL_API_KEY = os.environ.get("OWL_API_KEY", "")
 # ⚠️ 发布前必须与 SKILL.md 的 version / connector-meta.version / meta.json latest_version
 #    四处对齐（preflight A30 守门），否则装的是最新版也会被自己判成旧版——每次开工都
 #    提示「有新版本」，而更新完还是同一句（假提示，严重时 426 全停）。
-OWL_SKILL_VERSION = "1.3.8"
+OWL_SKILL_VERSION = "1.3.9"
 
 mcp = MCPServer(
     "owlwrite",
@@ -82,9 +82,17 @@ def _headers() -> dict:
         raise ToolError(
             "未配置 OWL_API_KEY。请在 MCP 客户端配置里加 env: {\"OWL_API_KEY\": \"owl_sk_...\"}；"
             "还没有账号请到 paper.skillsutra.cn 注册。")
-    return {"Authorization": f"Bearer {tok}",
-            "Content-Type": "application/json",
-            "X-Owl-Skill-Version": OWL_SKILL_VERSION}
+    h = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
+         "X-Owl-Skill-Version": OWL_SKILL_VERSION}
+    # 多技能接入底座（2026-11-26 签批）：与 owl_api.py identity_headers() 同口径。
+    # 发布平台/slug/release_uid 仅用于统计归因，不作鉴权依据。
+    try:
+        import owl_api
+        h.update({k: v for k, v in owl_api.identity_headers().items()
+                  if k != "X-Owl-Skill-Version"})
+    except Exception:  # noqa: BLE001 — 老环境缺 owl_api 时保持仅版本头，不影响调用
+        pass
+    return h
 
 
 async def _call(method: str, path: str, body: dict | None = None, params: dict | None = None,
