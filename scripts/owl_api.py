@@ -11,7 +11,8 @@ MCP 服务器（mcp_server.py）是独立实现（异步 httpx，远程常驻场
   · 所有函数返回 dict（服务端 JSON 原样，字段名与服务端一致）；
   · 出错抛 ApiError（带 code / message / http_status），调用方按 code 分支，不吞错；
   · 活动公告（owl_notice）统一补 `_notice_tip`，两条路径都会转告用户；
-  · 版本头 X-Owl-Skill-Version 必须随每个请求带上（网关据此判旧版）。
+  · 版本头 X-Owl-Skill-Version 必须随每个请求带上（网关据此判旧版）；
+    2026-11-26 多技能底座另带 platform / slug / release_uid 三头，供平台统计归因。
 
 凭据解析顺序：环境变量 OWL_API_KEY > ~/.owl_creds.json 的 owl_api_key（OWL_CREDS 可指定文件）。
 安全边界：默认只向官方网关发凭据；非官方 base 需显式 OWL_ALLOW_CUSTOM_BASE=1；
@@ -29,16 +30,50 @@ import urllib.request
 import zipfile
 
 # 版本同源：SKILL.md / README / scripts/mcp_server.py / connector-meta.json / owl_api.py
-OWL_SKILL_VERSION = "1.3.8"
+OWL_SKILL_VERSION = "1.3.9"
+
+# 多技能接入底座（2026-11-26 签批）：身份四维。
+# slug / 发布平台 / 发布标识优先从包内 release.json 读，缺失时回退以下常量（老包兼容）。
+# release_uid 是每次发布生成的 UUID，同一版本重发包也能在统计里区分。
+OWL_SKILL_SLUG = "owlwrite-paper"
+OWL_SKILL_PLATFORM = "skillhub"
+OWL_SKILL_RELEASE_UID = "6f4b0cd4-3abc-4651-8fec-43d00011073d"
+
+
+def _load_release_identity():
+    p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "release.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        return (str(d.get("slug") or OWL_SKILL_SLUG),
+                str(d.get("platform") or OWL_SKILL_PLATFORM),
+                str(d.get("release_uid") or OWL_SKILL_RELEASE_UID))
+    except Exception:  # noqa: BLE001 — 老包没有 release.json 时按常量上报
+        return OWL_SKILL_SLUG, OWL_SKILL_PLATFORM, OWL_SKILL_RELEASE_UID
+
+
+SKILL_SLUG, SKILL_PLATFORM, RELEASE_UID = _load_release_identity()
+
+
+def identity_headers():
+    """四个身份头统一出处；网关按注册表校验，未登记落 unregistered 隔离桶。"""
+    return {"X-Owl-Skill-Platform": SKILL_PLATFORM,
+            "X-Owl-Skill-Slug": SKILL_SLUG,
+            "X-Owl-Skill-Release-Uid": RELEASE_UID,
+            "X-Owl-Skill-Version": OWL_SKILL_VERSION}
+
 
 DEFAULT_BASE = "https://owl.skillsutra.cn"
 OFFICIAL_HOSTS = {"owl.skillsutra.cn"}
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+# 按 slug 隔离的私有凭据路径放首位，老路径保留回退——存量用户不因升级丢 key。
 CREDS_PATHS = (
+    os.path.expanduser("~/.owl_%s_creds.json" % SKILL_SLUG),
     os.path.expanduser("~/.owl_creds.json"),
     os.path.expanduser("~/.workbuddy/owl_creds.json"),
 )
 NOTICE_SEEN_PATH = os.path.expanduser("~/.owl_notice_seen.json")
+NOTICE_SEEN_PATH_BY_SKILL = os.path.expanduser("~/.owl_%s_notice_seen.json" % SKILL_SLUG)
 
 # run_id / order_no 是服务端下发的标识，只允许安全字符，杜绝路径注入
 _ID_RE = re.compile(r"^[A-Za-z0-9_\-]{1,80}$")
@@ -229,10 +264,7 @@ def request(method, path, body=None, params=None, key=None, base=None, timeout=1
     if params:
         url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
-    headers = {
-        "Accept": "application/json",
-        "X-Owl-Skill-Version": OWL_SKILL_VERSION,
-    }
+    headers = dict(identity_headers(), Accept="application/json")
     if host not in OFFICIAL_HOSTS and host not in LOCAL_HOSTS:
         # 非官方主机一律告警（含匿名接口——伪造的价格/公告同样能骗人），凭据类请求再拦
         print(f"# 警告：请求将发送到非官方网关 {host}", file=sys.stderr)
@@ -789,8 +821,7 @@ def request_bytes(method, path, body=None, params=None, key=None, base=None,
     if params:
         url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
     host = (urllib.parse.urlsplit(url).hostname or "").lower()
-    headers = {"Accept": "application/octet-stream",
-               "X-Owl-Skill-Version": OWL_SKILL_VERSION}
+    headers = dict(identity_headers(), Accept="application/octet-stream")
     if host not in OFFICIAL_HOSTS and host not in LOCAL_HOSTS:
         print(f"# 警告：请求将发送到非官方网关 {host}", file=sys.stderr)
         if not os.environ.get("OWL_ALLOW_CUSTOM_BASE", "").strip().lower() in ("1", "true", "yes"):
