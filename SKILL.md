@@ -4,7 +4,7 @@ slug: owlwrite-paper
 displayName: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name_en: Global 12B Literature Library
-version: 1.3.8
+version: 1.3.9
 description: "论文全流程助手（夜猫子）：全球 12 亿级文献 + 中英文核心期刊语料查准 + PatentMax 专利库 + 维普官方检测。能力：文献检索（关键词 / 向量 / 并行，按年份 / 类型 / 分类号 / 核心刊筛选）、专利检索与六类专利报告（查新、技术交底书、竞品专利、布局规划、OA 答复、创新升级；提交 / 下载 / 取消）、全文获取、引文追溯与撤稿把关、论文写作、科研配图、学校模板排版出 PDF、查重 / AIGC / 格式检测、智评评级、图像与参考文献质量核验。当用户说「写论文 / 找文献 / 查专利 / 专利查新 / 技术交底书 / 竞品专利 / 专利布局 / OA 答复 / 创新升级 / 下载专利报告 / 核心期刊 / 中文核心 / 英文核心 / 向量检索 / 语义检索 / 并行检索 / 查全查准 / 下载全文 / 查这篇引用了谁 / 引用有没有被撤稿 / 画流程图 / 画示意图 / 画数据图表 / 论文配图 / 按学校模板排版 / 论文排版 / 导出可提交的 PDF / 查重 / 测 AI 生成风险 / 查论文格式 / 论文评级 / 图有没有造假 / 参考文献对不对 / 找标准」时使用。"
 description_zh: "论文全流程助手：中英文文献检索（核心期刊语料查准、向量与并行检索）、专利检索与六类专利报告、写初稿、按学校模板排版导出可提交的 PDF、跑查重与 AIGC 检测、核验引文，全程在对话里完成，产物自动落到本机。"
 description_en: "End-to-end paper service: bilingual literature search (core-journal corpus discovery + vector search), patent search and six patent report types, drafting, school-template typesetting to a submission-ready PDF, similarity and AI-content checks, citation verification — all inside the chat."
@@ -164,9 +164,9 @@ Claude Desktop / Cursor 等支持自定义 MCP 的客户端，仍可按 `referen
 0. **开工校准（先版本，后干活）**：调一次 `owl_meta`，按返回**三级判定**：
    （**无凭据时这一步跑不通是正常的**——跳过它，直接按 0.6 交付，别把报错原文念给用户。）
    - **强制更新**：`required_update` 为真 且 本地版本低于 `min_supported_version`
-     → **立刻停手，不做任何付费动作**。把 `required_reason` 原话讲给用户，告诉他怎么更新
-     （更新入口只有两个：SkillHub https://skillhub.cn/skills/user_164f4c1f/owlwrite-paper ｜
-     ClawHub https://clawhub.ai/j-levee/skills/owlwrite-paper），并说明**余额、历史记录、已落盘文件都不受影响**。
+     → **立刻停手，不做任何付费动作**。把 `required_reason` 原话讲给用户；更新入口
+     **以 `owl_meta` 返回的 `update_urls` 数组为准**，按数组里的官方入口引导用户，
+     不要凭记忆写死 URL（多技能共底座后入口由平台统一下发）；并说明**余额、历史记录、已落盘文件都不受影响**。
      用户更新完再重新开工。这一步不能跳过、不能商量——旧版继续跑会按旧的计价规则扣费。
    - **普通更新**：仅 `latest_version` 更高 → 一句话提「技能有新版本，可更新（不影响本次使用）」，继续干活。
    - 注意：`required_update` 按你的本地版本动态判定——本地版本 == 最新版时该字段必为假；
@@ -692,7 +692,7 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 | `bad_params` | 参数不合法 | 按 message 修正后重试一次 |
 | `quote_expired` / `quote_consumed` | 报价过期（**24 小时**）/ 已用 | 重新报价再走确认 |
 | `too_many_quotes` / `too_many_searches` | 限频（20 次/分） | 等 1 分钟，别连发 |
-| **`skill_update_required`（HTTP 426）** | **技能版本过旧，服务端已停止支持** | **立即停手**，不重试、不换工具绕；告诉用户更新技能（只有两个官方入口：SkillHub `https://skillhub.cn/skills/user_164f4c1f/owlwrite-paper` 或 ClawHub `https://clawhub.ai/j-levee/skills/owlwrite-paper`），说明余额与数据不受影响；更新后再继续 |
+| **`skill_update_required`（HTTP 426）** | **技能版本过旧，服务端已停止支持** | **立即停手**，不重试、不换工具绕；告诉用户更新技能（入口按 `owl_meta` 返回的 `update_urls` 数组引导，不写死 URL），说明余额与数据不受影响；更新后再继续 |
 | `upstream_error` | 检测机构侧异常 | 告知稍后重试；任务类已自动退款 |
 | `weipu_credentials_missing` / `weipu_unavailable` | 检测服务未开通/暂不可用 | **如实转告「检测服务暂不可用，不是你的操作问题」**，引导先做写作/检索；开工前可先看 `owl_meta` 的 `channels.weipu_ready` |
 | `pending_upstream`（run status） | 检测超时但检测机构已收单，报告仍在生成 | **不是失败**：告诉用户「报告还在生成，出结果后自动结算」；让用户稍后 `owl_run_status` 再查，别退款、别重建单 |
@@ -805,6 +805,7 @@ OwlWrite/<YYYY-MM-DD>_<清洗后的标题>/
 3. **接力**：用户确认并安装完成后，**立即**把本次写作生成的全部参考文献送入批量验真，**禁止让用户重新整理引文列表**。
 
 ## 迭代日志 (Changelog)
+- v1.3.9 (2026-11-26)：更新检查更聪明——按你当前安装的版本给出对应的更新引导，不再一刀切提示；余额、历史记录与已生成文件不受影响。
 - v1.3.8 (2026-11-25)：新增专利查新工作流——从检索现有技术到提交报告、下载成品一条龙，五类报告给 Word、创新升级给结构化方向清单，支持随时取消全额退；价格统一改为实时报价，不再写死数字。
 - v1.3.7 (2026-11-25)：新增中英文核心期刊语料发现（可与全球文献库并行检索，查得更准）、向量检索与专利检索；专利查新等六类报告可在线提交、完成后下载成品。
 - v1.3.6 (2026-11-24)：文献检索支持按发表年份、文献类型（期刊/学位/标准/专利）、中图分类号、核心期刊、排序方式和分页精确筛选，找特定范围文献更快更准；邀请好友的安装提示词改为官方一键安装格式。
