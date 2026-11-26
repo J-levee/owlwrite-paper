@@ -2,7 +2,7 @@
 
 > 面向 AI Agent 的论文全流程技能包：**找文献 → 写初稿 → 跑检测 → 核引文**，全程在对话里完成，产物落到用户自己的电脑。
 
-- 版本：**1.3.9**（**装好即用：不配置 MCP 也能直接跑**；MCP 接入方式保留为可选）
+- 版本：**1.4.0**（**装好即用：不配置 MCP 也能直接跑**；MCP 接入方式保留为可选）
 - 官网与实时价目：https://paper.skillsutra.cn （价目页 `/price`，一切报价以接口实时返回为准）
 - 服务端点：https://owl.skillsutra.cn （MCP / HTTP 接口）
 
@@ -49,7 +49,7 @@
 
 | 类别 | 工具 | 说明 |
 |---|---|---|
-| 文献 | `owl_search` `owl_article` `owl_fulltext` `owl_oa` `owl_citations` | 中外文检索（中文核心期刊语料发现 / 英文核心期刊语料发现查准源，与全球库并行检索）、向量检索、详情、中文授权全文、外文 OA 免费全文、引文追溯 |
+| 文献 | `owl_search` `owl_article` `owl_fulltext` `owl_oa` `owl_citations` | 中外文检索（中文核心期刊 + 英文 OA 核心期刊全文向量检索查准源，与全球库并行检索）、向量检索、详情、中文授权全文、外文 OA 免费全文、引文追溯 |
 | 专利 | `owl_patent` | 专利检索与六类专利报告（含专利查新、技术交底书），按篇报价、完成后下载成品 |
 | 写作 | `owl_quote` `owl_run` `owl_run_status` `owl_run_content` | 一次性连续成文，按实际成文字数结算 |
 | 配图 | `owl_figure` | TikZ 矢量示意 / 数据图表 / AI 配图，按实际交付张数结算 |
