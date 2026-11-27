@@ -30,14 +30,14 @@ import urllib.request
 import zipfile
 
 # 版本同源：SKILL.md / README / scripts/mcp_server.py / connector-meta.json / owl_api.py
-OWL_SKILL_VERSION = "1.4.1"
+OWL_SKILL_VERSION = "1.4.2"
 
 # 多技能接入底座（2026-11-26 签批）：身份四维。
 # slug / 发布平台 / 发布标识优先从包内 release.json 读，缺失时回退以下常量（老包兼容）。
 # release_uid 是每次发布生成的 UUID，同一版本重发包也能在统计里区分。
 OWL_SKILL_SLUG = "owlwrite-paper"
 OWL_SKILL_PLATFORM = "skillhub"
-OWL_SKILL_RELEASE_UID = "e19380ae-e6a4-461d-ad0e-0034eb5c1190"
+OWL_SKILL_RELEASE_UID = "69bc8b80-abe5-4252-84a8-7db25b5e4c5e"
 
 
 def _load_release_identity():
