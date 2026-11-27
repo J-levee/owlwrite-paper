@@ -4,7 +4,7 @@ slug: owlwrite-paper
 displayName: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name: 夜猫子论文工作台（全球12亿文献支撑论文写作）
 display_name_en: Global 12B Literature Library
-version: 1.4.2
+version: 1.4.3
 description: "论文全流程助手（夜猫子）：全球 12 亿级文献 + 中文核心期刊 + 英文 OA 核心期刊全文向量检索查准 + PatentMax 专利库 + 维普官方检测。能力：文献检索（关键词 / 向量 / 并行，按年份 / 类型 / 分类号 / 核心刊筛选）、专利检索与六类专利报告（查新、技术交底书、竞品专利、布局规划、OA 答复、创新升级；提交 / 下载 / 取消）、全文获取、引文追溯与撤稿把关、论文写作、科研配图、学校模板排版出 PDF、查重 / AIGC / 格式检测、智评评级、图像与参考文献质量核验。当用户说「写论文 / 找文献 / 查专利 / 专利查新 / 技术交底书 / 竞品专利 / 专利布局 / OA 答复 / 创新升级 / 下载专利报告 / 核心期刊 / 中文核心 / 英文核心 / 向量检索 / 语义检索 / 并行检索 / 查全查准 / 下载全文 / 查这篇引用了谁 / 引用有没有被撤稿 / 画流程图 / 画示意图 / 画数据图表 / 论文配图 / 按学校模板排版 / 论文排版 / 导出可提交的 PDF / 查重 / 测 AI 生成风险 / 查论文格式 / 论文评级 / 图有没有造假 / 参考文献对不对 / 找标准」时使用。"
 description_zh: "论文全流程助手：中英文文献检索（中文核心期刊与英文 OA 核心期刊全文向量检索、并行检索）、专利检索与六类专利报告、写初稿、按学校模板排版导出可提交的 PDF、跑查重与 AIGC 检测、核验引文，全程在对话里完成，产物自动落到本机。"
 description_en: "End-to-end paper service: bilingual literature search (Chinese core journals and English OA core journals full-text vector search, with parallel retrieval), patent search and six patent report types, drafting, school-template typesetting to a submission-ready PDF, similarity and AI-content checks, citation verification — all inside the chat."
@@ -308,6 +308,7 @@ recommends:
 > 引文核验、撤稿把关、参考文献质量检查都是本技能内置能力（§四.4、§四.3），**不要为此转介其他技能**。
 
 ## 迭代日志 (Changelog)
+- v1.4.3 (2026-11-27)：查检测服务支持哪些文件、能传多大、有哪些商品，现在都能在商品列表里实时查到，不用更新技能。余额、积分与已生成文件不受影响。
 - v1.4.2 (2026-11-27)：查格式支持哪些文件、单文件能传多大，现在可在商品列表里直接查到；新增研究生版论文格式检测，参考文献质量增加 MLA/APA 版；支持直接上传 WPS 文档，单文件上限提高到 80MB。余额、积分与已生成文件不受影响。
 - v1.4.1 (2026-11-27)：智评等检测报告现在一次拿到全部文件，默认打开的综合报告是正文而非说明页；余额、积分与已生成文件不受影响。
 - v1.4.0 (2026-11-26)：说明更好用了——常见问题、从提问到交付的完整示例按场景整理，查功能更快；价格仍按实时查询显示。余额、历史记录与已生成文件不受影响。
