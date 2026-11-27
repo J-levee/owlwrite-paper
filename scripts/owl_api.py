@@ -30,14 +30,14 @@ import urllib.request
 import zipfile
 
 # 版本同源：SKILL.md / README / scripts/mcp_server.py / connector-meta.json / owl_api.py
-OWL_SKILL_VERSION = "1.4.0"
+OWL_SKILL_VERSION = "1.4.1"
 
 # 多技能接入底座（2026-11-26 签批）：身份四维。
 # slug / 发布平台 / 发布标识优先从包内 release.json 读，缺失时回退以下常量（老包兼容）。
 # release_uid 是每次发布生成的 UUID，同一版本重发包也能在统计里区分。
 OWL_SKILL_SLUG = "owlwrite-paper"
 OWL_SKILL_PLATFORM = "skillhub"
-OWL_SKILL_RELEASE_UID = "9b8b0029-195b-4eee-9040-0949c18e0b29"
+OWL_SKILL_RELEASE_UID = "e19380ae-e6a4-461d-ad0e-0034eb5c1190"
 
 
 def _load_release_identity():
@@ -454,8 +454,14 @@ def run_report(run_id, part="", key=None, base=None):
     if action == "check":
         rep = result.get("report") or {}
         files = rep.get("files") or []
-        parts = {f.get("kind"): f.get("file") for f in files
-                 if f.get("kind") and not str(f.get("kind")).startswith("other")}
+        # 2026-11-27 1.4.1：按落盘 file 名建索引（唯一），不再按 kind——
+        # kind 可能重复（智评事故两个 main），旧写法后者覆盖前者且 other* 被过滤，
+        # 用户唯一入口指向说明模板。file 是服务端 report_path 的动态白名单 key。
+        parts = {}
+        for f in files:
+            stem = os.path.splitext(str(f.get("file") or ""))[0]
+            if stem:
+                parts[stem] = f.get("file") or ""
         if not parts:
             parts = {"main": "", "compare": "", "simple": "", "fulltext": ""}
         pick = (part or "main").strip().lower()
@@ -476,7 +482,7 @@ def run_report(run_id, part="", key=None, base=None):
             "report_status": rep.get("status") or "unknown",
             "report_url": url_of(pick),
             "available_parts": {k: url_of(k) for k in sorted(parts)},
-            "report_tip": "检测类共 4 份：综合(HTML)/比对(HTML)/简洁(PDF)/原文对照(PDF)",
+            "report_tip": f"检测类共 {len(parts)} 份报告，可用 part 见 available_parts（默认 main 为综合报告）",
         }
 
     items = result.get("items") or []
